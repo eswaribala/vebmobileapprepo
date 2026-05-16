@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "VEB Dental Care",
+    "slug": "veb-dental-care",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1565C0"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vebdental.care"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1565C0"
+      },
+      "package": "com.vebdental.care",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow VEB Dental to access your photos."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b104bae6-2029-4ad7-a6af-dffd1240d5a6"
+      }
+    }
+  }
+}
