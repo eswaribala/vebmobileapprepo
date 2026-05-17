@@ -12,6 +12,9 @@ import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import PendingApprovalScreen from '../screens/auth/PendingApprovalScreen';
 import SignupRequestsScreen from '../screens/owner/SignupRequestsScreen';
+import MyConsultingScreen from '../screens/owner/MyConsultingScreen';
+import MyAppointmentFormScreen from '../screens/owner/MyAppointmentForm';
+import MyEarningsReport from '../screens/owner/MyEarningsReport';
 
 // Main screens
 import DashboardScreen from '../screens/Dashboard';
@@ -201,6 +204,51 @@ function LimitedAccessTabs() {
   );
 }
 
+// ── Owner-only: My Consulting stack ───────────────────────────────────────────
+
+function MyConsultingStack() {
+  return (
+    <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Screen name="MyConsulting" component={MyConsultingScreen} options={{ title: 'My Consulting' }} />
+      <Stack.Screen name="MyAppointmentForm" component={MyAppointmentFormScreen} options={{ title: 'Appointment' }} />
+      <Stack.Screen name="MyEarnings" component={MyEarningsReport} options={{ title: 'My Earnings' }} />
+    </Stack.Navigator>
+  );
+}
+
+// Owner tabs = Full tabs + My Consulting
+function OwnerTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          const icons = {
+            Dashboard: focused ? 'home' : 'home-outline',
+            Patients: focused ? 'people' : 'people-outline',
+            Appointments: focused ? 'calendar' : 'calendar-outline',
+            Clinic: focused ? 'medical' : 'medical-outline',
+            Bills: focused ? 'receipt' : 'receipt-outline',
+            Consulting: focused ? 'briefcase' : 'briefcase-outline',
+          };
+          return <Ionicons name={icons[route.name]} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textLight,
+        tabBarStyle,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        headerShown: false,
+      })}>
+      <Tab.Screen name="Dashboard" component={DashboardScreen}
+        options={{ headerShown: true, ...screenOptions, title: 'VEB DENTAL CARE', headerRight: () => <LogoutButton /> }} />
+      <Tab.Screen name="Patients" component={PatientStack} />
+      <Tab.Screen name="Appointments" component={AppointmentStack} />
+      <Tab.Screen name="Clinic" component={ClinicStack} />
+      <Tab.Screen name="Bills" component={BillingStack} />
+      <Tab.Screen name="Consulting" component={MyConsultingStack} />
+    </Tab.Navigator>
+  );
+}
+
 // ── Auth stack ─────────────────────────────────────────────────────────────────
 
 function AuthStack() {
@@ -230,9 +278,11 @@ export default function AppNavigator() {
     <NavigationContainer>
       {!user
         ? <AuthStack />
-        : isFullAccess(user.role)
-          ? <FullAccessTabs />
-          : <LimitedAccessTabs />}
+        : user.role === 'owner'
+          ? <OwnerTabs />
+          : isFullAccess(user.role)
+            ? <FullAccessTabs />
+            : <LimitedAccessTabs />}
     </NavigationContainer>
   );
 }

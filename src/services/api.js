@@ -105,6 +105,15 @@ export const ownerAPI = {
   reject: (id) => api.delete(`/auth/reject/${id}`),
 };
 
+// Owner personal consulting
+export const ownerConsultingAPI = {
+  getAppointments: (params) => api.get('/owner/appointments', { params }),
+  addAppointment: (data) => api.post('/owner/appointments', data),
+  updateAppointment: (id, data) => api.put(`/owner/appointments/${id}`, data),
+  deleteAppointment: (id) => api.delete(`/owner/appointments/${id}`),
+  getEarnings: (year) => api.get('/owner/earnings', { params: { year } }),
+};
+
 // Consultants
 export const consultantAPI = {
   getPaymentsSummary: () => api.get('/consultants/payments/summary'),

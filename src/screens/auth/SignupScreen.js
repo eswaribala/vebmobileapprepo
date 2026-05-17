@@ -8,7 +8,6 @@ import { useAuth } from '../../context/AuthContext';
 import { theme } from '../../utils/theme';
 
 const ROLES = [
-  { value: 'owner',          label: 'Owner' },
   { value: 'doctor',         label: 'Doctor' },
   { value: 'manager',        label: 'Manager' },
   { value: 'receptionist',   label: 'Receptionist' },
@@ -130,14 +129,12 @@ export default function SignupScreen({ navigation }) {
                 size={14}
                 color={role === 'owner' ? '#C62828' : ['doctor', 'manager'].includes(role) ? '#2E7D32' : '#1565C0'}
               />
-              <Text style={[styles.accessNoteText, { color: role === 'owner' ? '#C62828' : ['doctor', 'manager'].includes(role) ? '#2E7D32' : '#1565C0' }]}>
-                {role === 'owner'
-                  ? 'Super admin · Full access · Auto-approved'
-                  : ['manager'].includes(role)
-                    ? 'Full access · Auto-approved'
-                    : ['doctor'].includes(role)
-                      ? 'Full access · Requires owner approval'
-                      : 'Standard access · Requires owner approval'}
+              <Text style={[styles.accessNoteText, { color: role === 'manager' ? '#2E7D32' : '#1565C0' }]}>
+                {role === 'manager'
+                  ? 'Full access · Auto-approved'
+                  : role === 'doctor'
+                    ? 'Full access · Requires owner approval'
+                    : 'Standard access · Requires owner approval'}
               </Text>
             </View>
           ) : null}
