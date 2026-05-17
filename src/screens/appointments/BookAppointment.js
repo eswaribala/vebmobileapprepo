@@ -6,7 +6,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { theme } from '../../utils/theme';
-import { appointmentsAPI, patientsAPI, doctorsAPI } from '../../services/api';
+import { appointmentsAPI, patientsAPI, doctorsAPI, staffAPI } from '../../services/api';
+
+const CLINIC_BRANCHES = ['Avadi', 'Thiruninravur'];
 
 const TIME_SLOTS = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -23,8 +25,11 @@ export default function BookAppointmentScreen({ route, navigation }) {
   const prefPatient = route.params?.patient;
   const [patients, setPatients] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [consultants, setConsultants] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(prefPatient || null);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [selectedConsultant, setSelectedConsultant] = useState(null);
+  const [clinicBranch, setClinicBranch] = useState('Avadi');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('');
   const [purpose, setPurpose] = useState('');
@@ -35,9 +40,10 @@ export default function BookAppointmentScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([patientsAPI.getAll(), doctorsAPI.getAll()]).then(([pRes, dRes]) => {
+    Promise.all([patientsAPI.getAll(), doctorsAPI.getAll(), staffAPI.getAll()]).then(([pRes, dRes, sRes]) => {
       setPatients(pRes.data || []);
       setDoctors(dRes.data || []);
+      setConsultants((sRes.data || []).filter(s => s.role === 'Consultant'));
       if (dRes.data?.length > 0) setSelectedDoctor(dRes.data[0]);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -60,6 +66,8 @@ export default function BookAppointmentScreen({ route, navigation }) {
         appointment_time: time,
         purpose,
         notes,
+        clinic_branch: clinicBranch,
+        consultant_id: selectedConsultant?.id || null,
       });
       Alert.alert('Success', 'Appointment booked successfully!', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -124,6 +132,55 @@ export default function BookAppointmentScreen({ route, navigation }) {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Clinic Branch */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Clinic Branch</Text>
+        <View style={styles.branchRow}>
+          {CLINIC_BRANCHES.map(branch => (
+            <TouchableOpacity key={branch}
+              style={[styles.branchBtn, clinicBranch === branch && styles.branchBtnActive]}
+              onPress={() => setClinicBranch(branch)}>
+              <Ionicons name="business" size={16} color={clinicBranch === branch ? '#fff' : theme.colors.primary} />
+              <Text style={[styles.branchText, clinicBranch === branch && styles.branchTextActive]}>{branch}</Text>
+              {clinicBranch === branch && <Ionicons name="checkmark-circle" size={16} color="#fff" />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Consultant (optional) */}
+      {consultants.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Consultant (Optional)</Text>
+          <TouchableOpacity
+            style={[styles.doctorCard, !selectedConsultant && styles.doctorCardActive]}
+            onPress={() => setSelectedConsultant(null)}>
+            <View style={[styles.doctorAvatar, !selectedConsultant && styles.doctorAvatarActive]}>
+              <Ionicons name="close" size={18} color={!selectedConsultant ? '#fff' : theme.colors.textSecondary} />
+            </View>
+            <View style={styles.doctorInfo}>
+              <Text style={[styles.doctorName, !selectedConsultant && { color: theme.colors.primary }]}>None</Text>
+              <Text style={styles.doctorSpec}>No consultant for this appointment</Text>
+            </View>
+            {!selectedConsultant && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
+          </TouchableOpacity>
+          {consultants.map(c => (
+            <TouchableOpacity key={c.id}
+              style={[styles.doctorCard, selectedConsultant?.id === c.id && styles.doctorCardActive]}
+              onPress={() => setSelectedConsultant(c)}>
+              <View style={[styles.doctorAvatar, selectedConsultant?.id === c.id && styles.doctorAvatarActive]}>
+                <Ionicons name="person" size={20} color={selectedConsultant?.id === c.id ? '#fff' : '#0277BD'} />
+              </View>
+              <View style={styles.doctorInfo}>
+                <Text style={[styles.doctorName, selectedConsultant?.id === c.id && { color: theme.colors.primary }]}>Dr. {c.name}</Text>
+                <Text style={styles.doctorSpec}>{c.department || 'Consultant'}</Text>
+              </View>
+              {selectedConsultant?.id === c.id && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Date & Time */}
       <View style={styles.section}>
@@ -222,4 +279,9 @@ const styles = StyleSheet.create({
   notesInput: { borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, padding: 10, height: 80, textAlignVertical: 'top', color: theme.colors.text },
   bookBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.primary, marginHorizontal: theme.spacing.md, padding: 16, borderRadius: theme.radius.lg, gap: 8, ...theme.shadows.md },
   bookBtnText: { color: '#fff', fontSize: theme.fontSizes.lg, fontWeight: '700' },
+  branchRow: { flexDirection: 'row', gap: 10 },
+  branchBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 12, borderRadius: theme.radius.md, borderWidth: 1.5, borderColor: theme.colors.primary, backgroundColor: '#fff' },
+  branchBtnActive: { backgroundColor: theme.colors.primary },
+  branchText: { fontSize: theme.fontSizes.md, fontWeight: '700', color: theme.colors.primary },
+  branchTextActive: { color: '#fff' },
 });

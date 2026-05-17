@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "VEB Dental Care",
+    "name": "VEB DENTAL CARE",
     "slug": "veb-dental-care",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -28,7 +28,9 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -40,6 +42,12 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow VEB Dental to access your photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow VEB Dental to verify your location for attendance."
         }
       ]
     ],

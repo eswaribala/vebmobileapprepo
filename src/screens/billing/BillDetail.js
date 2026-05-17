@@ -22,7 +22,7 @@ export default function BillDetailScreen({ route }) {
       <!DOCTYPE html><html><head><meta charset="UTF-8">
       <style>body{font-family:Arial;padding:20px;color:#1a1a2e}.header{background:#1565C0;color:white;padding:16px;border-radius:8px;margin-bottom:16px}h1{font-size:18px}h2{font-size:14px;opacity:.8}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#1565C0;color:white;padding:8px;font-size:12px}td{padding:8px;border-bottom:1px solid #eee;font-size:12px}.total{font-size:18px;font-weight:bold;color:#1565C0;text-align:right}</style>
       </head><body>
-      <div class="header"><h1>🦷 VEB Dental Care & Implant Centre</h1><h2>Tax Invoice</h2></div>
+      <div class="header"><h1>🦷 VEB DENTAL CARE</h1><h2>Tax Invoice</h2></div>
       <p><strong>Bill No:</strong> ${bill.bill_number}</p>
       <p><strong>Date:</strong> ${bill.bill_date}</p>
       <p><strong>Patient:</strong> ${bill.first_name} ${bill.last_name} (${bill.p_id})</p>

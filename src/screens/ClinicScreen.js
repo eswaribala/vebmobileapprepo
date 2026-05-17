@@ -24,13 +24,17 @@ export default function ClinicScreen({ navigation }) {
       <View style={styles.banner}>
         <Ionicons name="business" size={40} color="rgba(255,255,255,0.3)" />
         <Text style={styles.bannerTitle}>Clinic Management</Text>
-        <Text style={styles.bannerSub}>Manage doctors, staff & attendance</Text>
+        <Text style={styles.bannerSub}>Manage doctors, consultants, managers & staff</Text>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Staff Management</Text>
         <ClinicOption icon="person-add" title="Doctors" subtitle="Add and manage clinic doctors"
           color="#1565C0" onPress={() => navigation.navigate('DoctorList')} />
+        <ClinicOption icon="briefcase" title="Consultants" subtitle="Visiting and specialist consultants"
+          color="#0277BD" onPress={() => navigation.navigate('ConsultantList')} />
+        <ClinicOption icon="shield" title="Managers" subtitle="Clinic and department managers"
+          color="#C62828" onPress={() => navigation.navigate('ManagerList')} />
         <ClinicOption icon="people" title="Staff" subtitle="Receptionist, nurses and more"
           color="#00897B" onPress={() => navigation.navigate('StaffList')} />
       </View>

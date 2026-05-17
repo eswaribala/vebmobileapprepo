@@ -129,7 +129,7 @@ export default function PrescriptionScreen({ route, navigation }) {
     <body>
       <div class="header">
         <div>
-          <div class="clinic-name">🦷 VEB Dental Care & Implant Centre</div>
+          <div class="clinic-name">🦷 VEB DENTAL CARE</div>
           <div class="clinic-sub">Professional Dental Care</div>
         </div>
         <div class="doctor-info">

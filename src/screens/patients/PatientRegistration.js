@@ -8,6 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { theme } from '../../utils/theme';
 import { patientsAPI } from '../../services/api';
 
+const BRANCHES = ['Avadi', 'Thiruninravur'];
 const GENDERS = ['Male', 'Female', 'Other'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -53,6 +54,7 @@ export default function PatientRegistrationScreen({ route, navigation }) {
     first_name: '', last_name: '', mobile: '', dob: '',
     gender: '', address: '', blood_group: '',
     medical_history: '', allergies: '', emergency_contact: '',
+    clinic_branch: 'Avadi',
   });
   const [age, setAge] = useState('');
 
@@ -71,6 +73,7 @@ export default function PatientRegistrationScreen({ route, navigation }) {
           medical_history: p.medical_history || '',
           allergies: p.allergies || '',
           emergency_contact: p.emergency_contact || '',
+          clinic_branch: p.clinic_branch || 'Avadi',
         });
         setAge(calcAge(p.dob));
       }).catch(() => Alert.alert('Error', 'Could not load patient data'));
@@ -120,6 +123,24 @@ export default function PatientRegistrationScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+
+      {/* Clinic Branch */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Clinic Branch</Text>
+        <View style={styles.branchRow}>
+          {BRANCHES.map(b => (
+            <TouchableOpacity
+              key={b}
+              style={[styles.branchBtn, form.clinic_branch === b && styles.branchBtnActive]}
+              onPress={() => setField('clinic_branch', b)}>
+              <Ionicons name="business" size={16} color={form.clinic_branch === b ? '#fff' : theme.colors.primary} />
+              <Text style={[styles.branchText, form.clinic_branch === b && styles.branchTextActive]}>{b}</Text>
+              {form.clinic_branch === b && <Ionicons name="checkmark-circle" size={16} color="#fff" />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Personal Information</Text>
 
@@ -165,6 +186,7 @@ export default function PatientRegistrationScreen({ route, navigation }) {
             value={form.dob ? new Date(form.dob) : new Date()}
             mode="date"
             display="default"
+            minimumDate={new Date(1930, 0, 1)}
             maximumDate={new Date()}
             onChange={onDateChange}
           />
@@ -237,6 +259,15 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     ...theme.shadows.sm,
   },
+  branchRow: { flexDirection: 'row', gap: 10 },
+  branchBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, padding: 12, borderRadius: theme.radius.md,
+    borderWidth: 1.5, borderColor: theme.colors.primary, backgroundColor: '#fff',
+  },
+  branchBtnActive: { backgroundColor: theme.colors.primary },
+  branchText: { fontSize: theme.fontSizes.md, fontWeight: '700', color: theme.colors.primary },
+  branchTextActive: { color: '#fff' },
   sectionTitle: { fontSize: theme.fontSizes.lg, fontWeight: '700', color: theme.colors.primary, marginBottom: theme.spacing.md, borderBottomWidth: 1, borderBottomColor: theme.colors.border, paddingBottom: 8 },
   field: { marginBottom: theme.spacing.md },
   label: { fontSize: theme.fontSizes.sm, fontWeight: '600', color: theme.colors.text, marginBottom: 6 },

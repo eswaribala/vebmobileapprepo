@@ -52,8 +52,7 @@ export default function PatientIDCardScreen({ route }) {
     <body>
       <div class="card">
         <div class="header">
-          <div class="clinic-name">🦷 VEB Dental Care</div>
-          <div class="clinic-sub">& Implant Centre</div>
+          <div class="clinic-name">🦷 VEB DENTAL CARE</div>
           <div class="avatar">${patient.first_name?.[0] || ''}${patient.last_name?.[0] || ''}</div>
           <div class="patient-name">${patient.first_name} ${patient.last_name}</div>
           <div class="patient-id">ID: ${patient.patient_id}</div>
@@ -69,7 +68,7 @@ export default function PatientIDCardScreen({ route }) {
           <div class="row"><span class="label">Emergency</span><span class="value">${patient.emergency_contact || '—'}</span></div>
           <div class="row"><span class="label">Registered</span><span class="value">${new Date(patient.created_at).toLocaleDateString('en-IN')}</span></div>
         </div>
-        <div class="footer">VEB Dental Care & Implant Centre · Patient Record</div>
+        <div class="footer">VEB DENTAL CARE · Patient Record</div>
       </div>
     </body>
     </html>
@@ -93,8 +92,7 @@ export default function PatientIDCardScreen({ route }) {
       {/* Card Preview */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Text style={styles.clinicName}>🦷 VEB Dental Care</Text>
-          <Text style={styles.clinicSub}>& Implant Centre</Text>
+          <Text style={styles.clinicName}>🦷 VEB DENTAL CARE</Text>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
@@ -121,7 +119,7 @@ export default function PatientIDCardScreen({ route }) {
         </View>
 
         <View style={styles.cardFooter}>
-          <Text style={styles.footerText}>VEB Dental Care & Implant Centre</Text>
+          <Text style={styles.footerText}>VEB DENTAL CARE</Text>
         </View>
       </View>
 

@@ -5,16 +5,55 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import { theme } from '../../utils/theme';
 import { attendanceAPI, staffAPI } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
+// ── Clinic geofence zones ─────────────────────────────────────────────────────
+const CLINIC_ZONES = [
+  { label: 'Avadi', lat: 13.1147, lng: 80.1015 },
+  { label: 'Thiruninravur', lat: 13.1249, lng: 80.0286 },
+];
+const GEOFENCE_RADIUS_M = 300; // 300 m radius around each clinic
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getClinicInRange(coords) {
+  return CLINIC_ZONES.find(
+    z => haversine(coords.latitude, coords.longitude, z.lat, z.lng) <= GEOFENCE_RADIUS_M
+  ) || null;
+}
+
+// ── IST date helper (mobile side, for absent marking) ─────────────────────────
+const getISTDate = () =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+// ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  present: { color: theme.colors.success, bg: theme.colors.successLight, label: 'Present', icon: 'checkmark-circle' },
-  absent: { color: theme.colors.error, bg: theme.colors.errorLight, label: 'Absent', icon: 'close-circle' },
+  present:  { color: theme.colors.success, bg: theme.colors.successLight, label: 'Present',  icon: 'checkmark-circle' },
+  absent:   { color: theme.colors.error,   bg: theme.colors.errorLight,   label: 'Absent',   icon: 'close-circle' },
   half_day: { color: theme.colors.warning, bg: theme.colors.warningLight, label: 'Half Day', icon: 'time' },
 };
 
-function AttendanceRow({ staffMember, record, onCheckIn, onCheckOut, onMarkAbsent }) {
+const LOC_BANNER = {
+  checking:  { color: '#1565C0', bg: '#E3F2FD', icon: 'navigate',        text: 'Checking location…' },
+  at_clinic: { color: '#2E7D32', bg: '#E8F5E9', icon: 'checkmark-circle', text: '' },
+  outside:   { color: '#B71C1C', bg: '#FFEBEE', icon: 'location-outline', text: 'Not at clinic location · Check-in disabled' },
+  denied:    { color: '#E65100', bg: '#FFF3E0', icon: 'warning',          text: 'Location permission required for check-in' },
+  error:     { color: '#B71C1C', bg: '#FFEBEE', icon: 'alert-circle',     text: 'Location check failed · Check-in disabled' },
+};
+
+// ── Attendance row ─────────────────────────────────────────────────────────────
+function AttendanceRow({ staffMember, record, onCheckIn, onCheckOut, onMarkAbsent, canCheckIn, canEdit }) {
   const sc = STATUS_CONFIG[record?.status] || STATUS_CONFIG.absent;
   const hasRecord = !!record;
 
@@ -44,17 +83,19 @@ function AttendanceRow({ staffMember, record, onCheckIn, onCheckOut, onMarkAbsen
         ) : null}
         <View style={styles.btnGroup}>
           {!hasRecord || !record.check_in ? (
-            <TouchableOpacity style={[styles.actionChip, { backgroundColor: theme.colors.successLight }]} onPress={() => onCheckIn(staffMember.id)}>
-              <Ionicons name="log-in" size={14} color={theme.colors.success} />
-              <Text style={[styles.chipLabel, { color: theme.colors.success }]}>In</Text>
-            </TouchableOpacity>
+            canCheckIn ? (
+              <TouchableOpacity style={[styles.actionChip, { backgroundColor: theme.colors.successLight }]} onPress={() => onCheckIn(staffMember.id)}>
+                <Ionicons name="log-in" size={14} color={theme.colors.success} />
+                <Text style={[styles.chipLabel, { color: theme.colors.success }]}>In</Text>
+              </TouchableOpacity>
+            ) : null
           ) : !record.check_out ? (
             <TouchableOpacity style={[styles.actionChip, { backgroundColor: theme.colors.warningLight }]} onPress={() => onCheckOut(staffMember.id)}>
               <Ionicons name="log-out" size={14} color={theme.colors.warning} />
               <Text style={[styles.chipLabel, { color: theme.colors.warning }]}>Out</Text>
             </TouchableOpacity>
           ) : null}
-          {!hasRecord && (
+          {!hasRecord && canEdit && (
             <TouchableOpacity style={[styles.actionChip, { backgroundColor: theme.colors.errorLight }]} onPress={() => onMarkAbsent(staffMember.id)}>
               <Ionicons name="close" size={14} color={theme.colors.error} />
               <Text style={[styles.chipLabel, { color: theme.colors.error }]}>Absent</Text>
@@ -66,25 +107,49 @@ function AttendanceRow({ staffMember, record, onCheckIn, onCheckOut, onMarkAbsen
   );
 }
 
+// ── Main screen ───────────────────────────────────────────────────────────────
 export default function AttendanceScreen({ navigation }) {
-  const [allStaff, setAllStaff] = useState([]);
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState('today');
-  const [summary, setSummary] = useState([]);
+  useAuth(); // keeps session context available if needed elsewhere
 
-  const today = new Date().toISOString().split('T')[0];
+  const [allStaff, setAllStaff]       = useState([]);
+  const [records, setRecords]         = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [tab, setTab]                 = useState('today');
+  const [summary, setSummary]         = useState([]);
+  const [locationStatus, setLocationStatus] = useState('checking');
+  const [clinicLabel, setClinicLabel] = useState(null);
+
+  const checkLocation = async () => {
+    setLocationStatus('checking');
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setClinicLabel(null);
+        setLocationStatus('denied');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const zone = getClinicInRange(loc.coords);
+      if (zone) {
+        setClinicLabel(zone.label);
+        setLocationStatus('at_clinic');
+      } else {
+        setClinicLabel(null);
+        setLocationStatus('outside');
+      }
+    } catch {
+      setClinicLabel(null);
+      setLocationStatus('error');
+    }
+  };
 
   const loadData = async () => {
     try {
-      const [sRes, aRes] = await Promise.all([
-        staffAPI.getAll(),
-        attendanceAPI.getToday(),
-      ]);
+      const [sRes, aRes] = await Promise.all([staffAPI.getAll(), attendanceAPI.getToday()]);
       setAllStaff(sRes.data || []);
       setRecords(aRes.data || []);
-    } catch (err) {}
+    } catch {}
     setLoading(false);
     setRefreshing(false);
   };
@@ -93,10 +158,11 @@ export default function AttendanceScreen({ navigation }) {
     try {
       const res = await attendanceAPI.getSummary();
       setSummary(res.data || []);
-    } catch (err) {}
+    } catch {}
   };
 
   useFocusEffect(useCallback(() => {
+    checkLocation();
     loadData();
     loadSummary();
   }, []));
@@ -106,7 +172,7 @@ export default function AttendanceScreen({ navigation }) {
   const handleCheckIn = async (staffId) => {
     try {
       const res = await attendanceAPI.checkIn(staffId);
-      Alert.alert('Checked In', `Check-in recorded at ${res.time}`);
+      Alert.alert('Checked In', `Check-in recorded at ${res.time} IST`);
       loadData();
     } catch (err) { Alert.alert('Error', err.message); }
   };
@@ -114,26 +180,33 @@ export default function AttendanceScreen({ navigation }) {
   const handleCheckOut = async (staffId) => {
     try {
       const res = await attendanceAPI.checkOut(staffId);
-      Alert.alert('Checked Out', `Check-out recorded at ${res.time}`);
+      Alert.alert('Checked Out', `Check-out recorded at ${res.time} IST`);
       loadData();
     } catch (err) { Alert.alert('Error', err.message); }
   };
 
   const handleMarkAbsent = async (staffId) => {
     try {
-      await attendanceAPI.save({ staff_id: staffId, date: today, status: 'absent' });
+      await attendanceAPI.save({ staff_id: staffId, date: getISTDate(), status: 'absent' });
       loadData();
     } catch (err) { Alert.alert('Error', err.message); }
   };
 
-  const presentCount = records.filter(r => r.status === 'present').length;
-  const absentCount = records.filter(r => r.status === 'absent').length;
+  const presentCount  = records.filter(r => r.status === 'present').length;
+  const absentCount   = records.filter(r => r.status === 'absent').length;
+  // Check-in requires being physically at a clinic location (applies to all roles)
+  const canCheckIn    = locationStatus === 'at_clinic';
+  const bannerCfg     = LOC_BANNER[locationStatus] || LOC_BANNER.error;
+  const bannerText    = locationStatus === 'at_clinic'
+    ? `At ${clinicLabel} · Check-in enabled`
+    : bannerCfg.text;
+  const bannerDisplay = bannerCfg;
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>;
 
   return (
     <View style={styles.container}>
-      {/* Stats Bar */}
+      {/* Stats */}
       <View style={styles.statsBar}>
         <View style={styles.statItem}>
           <Text style={styles.statNum}>{allStaff.length}</Text>
@@ -156,11 +229,22 @@ export default function AttendanceScreen({ navigation }) {
         </View>
       </View>
 
+      {/* Location banner */}
+      <View style={[styles.locBanner, { backgroundColor: bannerDisplay.bg }]}>
+        {locationStatus === 'checking'
+          ? <ActivityIndicator size="small" color={bannerDisplay.color} style={{ marginRight: 8 }} />
+          : <Ionicons name={bannerDisplay.icon} size={15} color={bannerDisplay.color} style={{ marginRight: 6 }} />
+        }
+        <Text style={[styles.locText, { color: bannerDisplay.color }]}>{bannerText}</Text>
+      </View>
+
       {/* Tabs */}
       <View style={styles.tabBar}>
         {['today', 'summary'].map(t => (
           <TouchableOpacity key={t} style={[styles.tabBtn, tab === t && styles.tabBtnActive]} onPress={() => setTab(t)}>
-            <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>{t === 'today' ? "Today's Attendance" : 'Monthly Summary'}</Text>
+            <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+              {t === 'today' ? "Today's Attendance" : 'Monthly Summary'}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -170,19 +254,28 @@ export default function AttendanceScreen({ navigation }) {
           data={allStaff}
           keyExtractor={item => item.id.toString()}
           renderItem={({ item }) => (
-            <AttendanceRow staffMember={item} record={getRecord(item.id)}
-              onCheckIn={handleCheckIn} onCheckOut={handleCheckOut} onMarkAbsent={handleMarkAbsent} />
+            <AttendanceRow
+              staffMember={item}
+              record={getRecord(item.id)}
+              onCheckIn={handleCheckIn}
+              onCheckOut={handleCheckOut}
+              onMarkAbsent={handleMarkAbsent}
+              canCheckIn={canCheckIn}
+              canEdit={true}
+            />
           )}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); checkLocation(); loadData(); }} />}
           contentContainerStyle={{ paddingBottom: 20 }}
           ListHeaderComponent={
-            <Text style={styles.dateHeader}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</Text>
+            <Text style={styles.dateHeader}>
+              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+            </Text>
           }
         />
       ) : (
         <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadSummary(); }} />}>
           <Text style={styles.dateHeader}>
-            {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} Summary
+            {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' })} Summary
           </Text>
           {summary.map(s => (
             <View key={s.id} style={styles.summaryRow}>
@@ -216,37 +309,29 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   statsBar: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    flexDirection: 'row', backgroundColor: '#fff', paddingVertical: 12,
+    paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border,
   },
   statItem: { flex: 1, alignItems: 'center' },
   statNum: { fontSize: 22, fontWeight: 'bold', color: theme.colors.text },
   statLbl: { fontSize: 11, color: theme.colors.textSecondary, fontWeight: '600' },
   statDivider: { width: 1, backgroundColor: theme.colors.border, marginVertical: 4 },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+  locBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.06)',
   },
+  locText: { fontSize: 12, fontWeight: '600', flex: 1 },
+  tabBar: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   tabBtnActive: { borderBottomWidth: 2, borderBottomColor: theme.colors.primary },
   tabText: { fontSize: theme.fontSizes.sm, color: theme.colors.textSecondary, fontWeight: '600' },
   tabTextActive: { color: theme.colors.primary },
   dateHeader: { fontSize: theme.fontSizes.sm, color: theme.colors.textSecondary, fontWeight: '600', padding: theme.spacing.md },
   row: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: theme.spacing.md,
-    marginBottom: 8,
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.md,
-    ...theme.shadows.sm,
-    alignItems: 'center',
+    flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: theme.spacing.md,
+    marginBottom: 8, borderRadius: theme.radius.md, padding: theme.spacing.md,
+    ...theme.shadows.sm, alignItems: 'center',
   },
   rowLeft: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 10 },

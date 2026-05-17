@@ -1,10 +1,17 @@
 import React from 'react';
+import { View, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../utils/theme';
+import { useAuth, isFullAccess } from '../context/AuthContext';
 
+// Auth screens
+import LoginScreen from '../screens/auth/LoginScreen';
+import SignupScreen from '../screens/auth/SignupScreen';
+
+// Main screens
 import DashboardScreen from '../screens/Dashboard';
 import PatientListScreen from '../screens/patients/PatientList';
 import PatientRegistrationScreen from '../screens/patients/PatientRegistration';
@@ -17,6 +24,12 @@ import DoctorListScreen from '../screens/doctors/DoctorList';
 import DoctorFormScreen from '../screens/doctors/DoctorForm';
 import StaffListScreen from '../screens/staff/StaffList';
 import StaffFormScreen from '../screens/staff/StaffForm';
+import ConsultantListScreen from '../screens/consultants/ConsultantList';
+import ConsultantFormScreen from '../screens/consultants/ConsultantForm';
+import ConsultantDetailScreen from '../screens/consultants/ConsultantDetail';
+import ConsultantPaymentFormScreen from '../screens/consultants/ConsultantPaymentForm';
+import ManagerListScreen from '../screens/managers/ManagerList';
+import ManagerFormScreen from '../screens/managers/ManagerForm';
 import AttendanceScreen from '../screens/attendance/AttendanceScreen';
 import DiagnosisScreen from '../screens/diagnosis/DiagnosisScreen';
 import TreatmentPlanScreen from '../screens/diagnosis/TreatmentPlan';
@@ -32,6 +45,8 @@ const screenOptions = {
   headerTintColor: '#fff',
   headerTitleStyle: { fontWeight: 'bold' },
 };
+
+// ── Shared stacks ─────────────────────────────────────────────────────────────
 
 function PatientStack() {
   return (
@@ -58,6 +73,17 @@ function AppointmentStack() {
   );
 }
 
+// Attendance-only stack (for limited-access users)
+function AttendanceStack() {
+  return (
+    <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
+    </Stack.Navigator>
+  );
+}
+
+// ── Full-access Clinic stack ───────────────────────────────────────────────────
+
 function ClinicStack() {
   return (
     <Stack.Navigator screenOptions={screenOptions}>
@@ -66,6 +92,12 @@ function ClinicStack() {
       <Stack.Screen name="DoctorForm" component={DoctorFormScreen} options={{ title: 'Doctor Details' }} />
       <Stack.Screen name="StaffList" component={StaffListScreen} options={{ title: 'Staff' }} />
       <Stack.Screen name="StaffForm" component={StaffFormScreen} options={{ title: 'Staff Details' }} />
+      <Stack.Screen name="ConsultantList" component={ConsultantListScreen} options={{ title: 'Consultants' }} />
+      <Stack.Screen name="ConsultantForm" component={ConsultantFormScreen} options={{ title: 'Consultant Details' }} />
+      <Stack.Screen name="ConsultantDetail" component={ConsultantDetailScreen} options={{ title: 'Consultant' }} />
+      <Stack.Screen name="ConsultantPaymentForm" component={ConsultantPaymentFormScreen} options={{ title: 'Record Payment' }} />
+      <Stack.Screen name="ManagerList" component={ManagerListScreen} options={{ title: 'Managers' }} />
+      <Stack.Screen name="ManagerForm" component={ManagerFormScreen} options={{ title: 'Manager Details' }} />
       <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
     </Stack.Navigator>
   );
@@ -80,41 +112,123 @@ function BillingStack() {
   );
 }
 
+// ── Logout header button ───────────────────────────────────────────────────────
+
+function LogoutButton() {
+  const { logout } = useAuth();
+  return (
+    <TouchableOpacity onPress={logout} style={{ marginRight: 14 }}>
+      <Ionicons name="log-out-outline" size={22} color="#fff" />
+    </TouchableOpacity>
+  );
+}
+
+// ── Tab navigators ─────────────────────────────────────────────────────────────
+
+const tabBarStyle = {
+  backgroundColor: '#fff',
+  borderTopWidth: 1,
+  borderTopColor: theme.colors.border,
+  paddingBottom: 5,
+  height: 60,
+};
+
+function FullAccessTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          const icons = {
+            Dashboard: focused ? 'home' : 'home-outline',
+            Patients: focused ? 'people' : 'people-outline',
+            Appointments: focused ? 'calendar' : 'calendar-outline',
+            Clinic: focused ? 'medical' : 'medical-outline',
+            Bills: focused ? 'receipt' : 'receipt-outline',
+          };
+          return <Ionicons name={icons[route.name]} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textLight,
+        tabBarStyle,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        headerShown: false,
+      })}>
+      <Tab.Screen name="Dashboard" component={DashboardScreen}
+        options={{
+          headerShown: true, ...screenOptions, title: 'VEB DENTAL CARE',
+          headerRight: () => <LogoutButton />,
+        }} />
+      <Tab.Screen name="Patients" component={PatientStack} />
+      <Tab.Screen name="Appointments" component={AppointmentStack} />
+      <Tab.Screen name="Clinic" component={ClinicStack} />
+      <Tab.Screen name="Bills" component={BillingStack} />
+    </Tab.Navigator>
+  );
+}
+
+function LimitedAccessTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          const icons = {
+            Patients: focused ? 'people' : 'people-outline',
+            Appointments: focused ? 'calendar' : 'calendar-outline',
+            Attendance: focused ? 'time' : 'time-outline',
+          };
+          return <Ionicons name={icons[route.name]} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textLight,
+        tabBarStyle,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        headerShown: false,
+      })}>
+      <Tab.Screen name="Patients" component={PatientStack}
+        options={{
+          // Inject logout into patient list header via screenOptions override
+        }} />
+      <Tab.Screen name="Appointments" component={AppointmentStack} />
+      <Tab.Screen name="Attendance" component={AttendanceStack}
+        options={{
+          headerShown: true, ...screenOptions, title: 'Attendance',
+          headerRight: () => <LogoutButton />,
+        }} />
+    </Tab.Navigator>
+  );
+}
+
+// ── Auth stack ─────────────────────────────────────────────────────────────────
+
+function AuthStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Signup" component={SignupScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// ── Root navigator ─────────────────────────────────────────────────────────────
+
 export default function AppNavigator() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.primary }}>
+        <ActivityIndicator size="large" color="#fff" />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-          tabBarIcon: ({ focused, color, size }) => {
-            const icons = {
-              Dashboard: focused ? 'home' : 'home-outline',
-              Patients: focused ? 'people' : 'people-outline',
-              Appointments: focused ? 'calendar' : 'calendar-outline',
-              Clinic: focused ? 'medical' : 'medical-outline',
-              Bills: focused ? 'receipt' : 'receipt-outline',
-            };
-            return <Ionicons name={icons[route.name]} size={size} color={color} />;
-          },
-          tabBarActiveTintColor: theme.colors.primary,
-          tabBarInactiveTintColor: theme.colors.textLight,
-          tabBarStyle: {
-            backgroundColor: '#fff',
-            borderTopWidth: 1,
-            borderTopColor: theme.colors.border,
-            paddingBottom: 5,
-            height: 60,
-          },
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-          headerShown: false,
-        })}
-      >
-        <Tab.Screen name="Dashboard" component={DashboardScreen}
-          options={{ headerShown: true, ...screenOptions, title: 'VEB Dental Care' }} />
-        <Tab.Screen name="Patients" component={PatientStack} />
-        <Tab.Screen name="Appointments" component={AppointmentStack} />
-        <Tab.Screen name="Clinic" component={ClinicStack} />
-        <Tab.Screen name="Bills" component={BillingStack} />
-      </Tab.Navigator>
+      {!user
+        ? <AuthStack />
+        : isFullAccess(user.role)
+          ? <FullAccessTabs />
+          : <LimitedAccessTabs />}
     </NavigationContainer>
   );
 }

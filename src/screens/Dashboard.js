@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator
+  RefreshControl, ActivityIndicator, Linking, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { theme } from '../utils/theme';
-import { patientsAPI, appointmentsAPI, billingAPI } from '../services/api';
+import { patientsAPI, appointmentsAPI, billingAPI, consultantAPI } from '../services/api';
 
 function StatCard({ icon, label, value, color, bg }) {
   return (
@@ -49,15 +49,20 @@ function AppointmentItem({ item, onPress }) {
 export default function DashboardScreen({ navigation }) {
   const [stats, setStats] = useState({ patients: 0, today: 0, revenue: 0, pending: 0 });
   const [todayAppts, setTodayAppts] = useState([]);
+  const [branchFilter, setBranchFilter] = useState('All');
+  const [reminders, setReminders] = useState([]);
+  const [consultantReport, setConsultantReport] = useState({ rows: [], grand_total: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = async () => {
     try {
-      const [pRes, aRes, bRes] = await Promise.all([
+      const [pRes, aRes, bRes, rRes, cRes] = await Promise.all([
         patientsAPI.getAll().catch(() => ({ data: [] })),
         appointmentsAPI.getToday().catch(() => ({ data: [] })),
         billingAPI.getStats().catch(() => ({ data: { today_revenue: 0, pending_count: 0 } })),
+        appointmentsAPI.getReminders().catch(() => ({ data: [] })),
+        consultantAPI.getPaymentsSummary().catch(() => ({ data: [], grand_total: 0 })),
       ]);
       setStats({
         patients: pRes.data?.length || 0,
@@ -66,9 +71,33 @@ export default function DashboardScreen({ navigation }) {
         pending: bRes.data?.pending_count || 0,
       });
       setTodayAppts(aRes.data || []);
+      setReminders(rRes.data || []);
+      setConsultantReport({ rows: cRes.data || [], grand_total: cRes.grand_total || 0 });
     } catch (_) {}
     setLoading(false);
     setRefreshing(false);
+  };
+
+  const sendPatientReminder = (appt) => {
+    if (!appt.mobile) {
+      Alert.alert('No Mobile', 'No mobile number saved for this patient.');
+      return;
+    }
+    const dateObj = new Date(appt.appointment_date + 'T00:00:00');
+    const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const branch = appt.clinic_branch || 'Avadi';
+    const message =
+      `Dear ${appt.first_name},\n\n` +
+      `Reminder: You have an appointment at VEB DENTAL CARE, ${branch}.\n\n` +
+      `📅 Date: ${dateStr}\n` +
+      `⏰ Time: ${appt.appointment_time}\n` +
+      `👨‍⚕️ Doctor: ${appt.doctor_name}\n` +
+      `🦷 Purpose: ${appt.purpose || 'Consultation'}\n\n` +
+      `Please arrive 10 minutes early. Contact us if you need to reschedule.\n\n` +
+      `VEB DENTAL CARE, ${branch}`;
+    const phone = `91${appt.mobile.replace(/\D/g, '')}`;
+    Linking.openURL(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`)
+      .catch(() => Alert.alert('WhatsApp Not Found', 'Please install WhatsApp to send reminders.'));
   };
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
@@ -79,7 +108,7 @@ export default function DashboardScreen({ navigation }) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={styles.loadingText}>Loading VEB Dental...</Text>
+        <Text style={styles.loadingText}>Loading VEB DENTAL CARE...</Text>
       </View>
     );
   }
@@ -89,8 +118,7 @@ export default function DashboardScreen({ navigation }) {
       {/* Clinic Banner */}
       <View style={styles.banner}>
         <View style={styles.bannerLeft}>
-          <Text style={styles.bannerTitle}>VEB Dental Care</Text>
-          <Text style={styles.bannerSubtitle}>& Implant Centre</Text>
+          <Text style={styles.bannerTitle}>VEB DENTAL CARE</Text>
           <Text style={styles.bannerDate}>
             {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </Text>
@@ -107,6 +135,28 @@ export default function DashboardScreen({ navigation }) {
         <StatCard icon="cash" label="Today Revenue" value={`₹${stats.revenue?.toLocaleString('en-IN')}`} color={theme.colors.success} bg="#E8F5E9" />
         <StatCard icon="time" label="Pending Bills" value={stats.pending} color={theme.colors.warning} bg="#FFF3E0" />
       </View>
+
+      {/* Branch-wise appointment breakdown */}
+      {(() => {
+        const avadi = todayAppts.filter(a => (a.clinic_branch || 'Avadi') === 'Avadi').length;
+        const thiru = todayAppts.filter(a => a.clinic_branch === 'Thiruninravur').length;
+        return (
+          <View style={styles.branchBar}>
+            {[
+              { label: 'Avadi', count: avadi, color: theme.colors.primary, bg: '#E3F2FD' },
+              { label: 'Thiruninravur', count: thiru, color: '#7B1FA2', bg: '#F3E5F5' },
+            ].map(b => (
+              <TouchableOpacity key={b.label}
+                style={[styles.branchCard, { backgroundColor: b.bg }, branchFilter === b.label && styles.branchCardActive]}
+                onPress={() => setBranchFilter(prev => prev === b.label ? 'All' : b.label)}>
+                <Ionicons name="business" size={14} color={b.color} />
+                <Text style={[styles.branchCardLabel, { color: b.color }]}>{b.label}</Text>
+                <Text style={[styles.branchCardCount, { color: b.color }]}>{b.count} appt{b.count !== 1 ? 's' : ''}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        );
+      })()}
 
       {/* Quick Actions */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -128,22 +178,133 @@ export default function DashboardScreen({ navigation }) {
       </View>
 
       {/* Today's Appointments */}
+      {(() => {
+        const filtered = branchFilter === 'All'
+          ? todayAppts
+          : todayAppts.filter(a => (a.clinic_branch || 'Avadi') === branchFilter);
+        return (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Today's Appointments</Text>
+                {branchFilter !== 'All' && (
+                  <TouchableOpacity onPress={() => setBranchFilter('All')} style={styles.branchFilterTag}>
+                    <Ionicons name="business" size={11} color={theme.colors.primary} />
+                    <Text style={styles.branchFilterTagText}>{branchFilter}</Text>
+                    <Ionicons name="close-circle" size={13} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate('Appointments')}>
+                <Text style={styles.viewAll}>View All</Text>
+              </TouchableOpacity>
+            </View>
+            {filtered.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Ionicons name="calendar-outline" size={40} color={theme.colors.border} />
+                <Text style={styles.emptyText}>
+                  {branchFilter === 'All' ? 'No appointments today' : `No appointments at ${branchFilter} today`}
+                </Text>
+              </View>
+            ) : (
+              filtered.slice(0, 5).map((appt) => (
+                <AppointmentItem key={appt.id} item={appt}
+                  onPress={() => navigation.navigate('Patients', { screen: 'PatientDetails', params: { id: appt.patient_id } })} />
+              ))
+            )}
+          </View>
+        );
+      })()}
+
+      {/* Patient Reminders */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Today's Appointments</Text>
+          <View style={styles.reportTitleRow}>
+            <View style={[styles.reportIconWrap, { backgroundColor: '#E8F5E9' }]}>
+              <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+            </View>
+            <View>
+              <Text style={styles.sectionTitle2}>Patient Reminders</Text>
+              <Text style={styles.reminderSubtitle}>Tomorrow's appointments</Text>
+            </View>
+          </View>
           <TouchableOpacity onPress={() => navigation.navigate('Appointments')}>
             <Text style={styles.viewAll}>View All</Text>
           </TouchableOpacity>
         </View>
-        {todayAppts.length === 0 ? (
+
+        {reminders.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Ionicons name="calendar-outline" size={40} color={theme.colors.border} />
-            <Text style={styles.emptyText}>No appointments today</Text>
+            <Ionicons name="checkmark-circle-outline" size={36} color="#25D366" />
+            <Text style={styles.emptyText}>No reminders due tomorrow</Text>
           </View>
         ) : (
-          todayAppts.slice(0, 5).map((appt) => (
-            <AppointmentItem key={appt.id} item={appt}
-              onPress={() => navigation.navigate('Patients', { screen: 'PatientDetails', params: { id: appt.patient_id } })} />
+          reminders.map((appt) => (
+            <View key={appt.id} style={styles.reminderRow}>
+              <View style={styles.reminderTime}>
+                <Text style={styles.reminderTimeText}>{appt.appointment_time}</Text>
+                <Text style={styles.reminderBranch}>{appt.clinic_branch || 'Avadi'}</Text>
+              </View>
+              <View style={styles.reminderInfo}>
+                <Text style={styles.reminderName}>{appt.first_name} {appt.last_name}</Text>
+                <Text style={styles.reminderPurpose}>{appt.purpose || 'Consultation'} · {appt.doctor_name}</Text>
+                <Text style={styles.reminderMobile}>{appt.mobile}</Text>
+              </View>
+              <TouchableOpacity style={styles.waSendBtn} onPress={() => sendPatientReminder(appt)}>
+                <Ionicons name="logo-whatsapp" size={18} color="#fff" />
+                <Text style={styles.waSendText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+      </View>
+
+      {/* Consultant Payment Report */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.reportTitleRow}>
+            <View style={styles.reportIconWrap}>
+              <Ionicons name="briefcase" size={16} color="#0277BD" />
+            </View>
+            <Text style={styles.sectionTitle2}>Consultant Payments</Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('Clinic', { screen: 'ConsultantList' })}>
+            <Text style={styles.viewAll}>View All</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Grand total bar */}
+        <View style={styles.grandTotalBar}>
+          <Text style={styles.grandTotalLabel}>Total Paid to Consultants</Text>
+          <Text style={styles.grandTotalValue}>₹{consultantReport.grand_total.toLocaleString('en-IN')}</Text>
+        </View>
+
+        {consultantReport.rows.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="briefcase-outline" size={36} color={theme.colors.border} />
+            <Text style={styles.emptyText}>No consultant payments recorded</Text>
+          </View>
+        ) : (
+          consultantReport.rows.map((c) => (
+            <TouchableOpacity key={c.consultant_id} style={styles.consultantRow}
+              onPress={() => navigation.navigate('Clinic', {
+                screen: 'ConsultantDetail',
+                params: { consultant: { id: c.consultant_id, name: c.name, department: c.department, mobile: c.mobile } },
+              })}>
+              <View style={styles.consultantAvatar}>
+                <Text style={styles.consultantAvatarText}>{c.name?.[0]?.toUpperCase()}</Text>
+              </View>
+              <View style={styles.consultantInfo}>
+                <Text style={styles.consultantName}>Dr. {c.name}</Text>
+                <Text style={styles.consultantMeta}>
+                  {c.appointment_count} appt{c.appointment_count !== 1 ? 's' : ''} · {c.payment_count} payment{c.payment_count !== 1 ? 's' : ''}
+                </Text>
+              </View>
+              <View style={styles.consultantPaid}>
+                <Text style={styles.consultantAmount}>₹{(c.total_paid || 0).toLocaleString('en-IN')}</Text>
+                <Ionicons name="chevron-forward" size={14} color={theme.colors.border} />
+              </View>
+            </TouchableOpacity>
           ))
         )}
       </View>
@@ -151,7 +312,7 @@ export default function DashboardScreen({ navigation }) {
       {/* Clinic Info */}
       <View style={styles.clinicInfo}>
         <Ionicons name="location" size={16} color={theme.colors.textSecondary} />
-        <Text style={styles.clinicInfoText}>VEB Dental Care & Implant Centre</Text>
+        <Text style={styles.clinicInfoText}>VEB DENTAL CARE</Text>
       </View>
       <View style={styles.bottomPad} />
     </ScrollView>
@@ -261,4 +422,63 @@ const styles = StyleSheet.create({
   },
   clinicInfoText: { color: theme.colors.textSecondary, fontSize: 12, marginLeft: 4 },
   bottomPad: { height: 20 },
+  branchBar: { flexDirection: 'row', paddingHorizontal: theme.spacing.sm, gap: theme.spacing.sm, marginBottom: 4 },
+  branchCard: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: theme.radius.md, paddingVertical: 10, paddingHorizontal: 12,
+    borderWidth: 1.5, borderColor: 'transparent',
+  },
+  branchCardActive: { borderColor: theme.colors.primary },
+  branchCardLabel: { fontSize: 12, fontWeight: '700', flex: 1 },
+  branchCardCount: { fontSize: 13, fontWeight: '800' },
+  branchFilterTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  branchFilterTagText: { fontSize: 11, color: theme.colors.primary, fontWeight: '600' },
+  reminderSubtitle: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 1 },
+  reminderRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: theme.spacing.md, paddingVertical: 10,
+    borderTopWidth: 1, borderTopColor: theme.colors.divider, gap: 10,
+  },
+  reminderTime: {
+    width: 52, alignItems: 'center',
+    backgroundColor: '#E8F5E9', borderRadius: theme.radius.sm, paddingVertical: 6,
+  },
+  reminderTimeText: { fontSize: 12, fontWeight: 'bold', color: '#2E7D32' },
+  reminderBranch: { fontSize: 9, color: '#2E7D32', fontWeight: '600', marginTop: 2 },
+  reminderInfo: { flex: 1 },
+  reminderName: { fontSize: theme.fontSizes.md, fontWeight: '700', color: theme.colors.text },
+  reminderPurpose: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 1 },
+  reminderMobile: { fontSize: 11, color: theme.colors.textLight, marginTop: 1 },
+  waSendBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#25D366', paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 8,
+  },
+  waSendText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  reportTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  reportIconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center' },
+  sectionTitle2: { fontSize: theme.fontSizes.lg, fontWeight: '700', color: theme.colors.text },
+  grandTotalBar: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#E3F2FD', marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.sm, borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md, paddingVertical: 10,
+  },
+  grandTotalLabel: { fontSize: theme.fontSizes.sm, color: '#0277BD', fontWeight: '600' },
+  grandTotalValue: { fontSize: 18, fontWeight: 'bold', color: '#0277BD' },
+  consultantRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm,
+    borderTopWidth: 1, borderTopColor: theme.colors.divider,
+  },
+  consultantAvatar: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: '#0277BD',
+    justifyContent: 'center', alignItems: 'center', marginRight: 10,
+  },
+  consultantAvatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  consultantInfo: { flex: 1 },
+  consultantName: { fontSize: theme.fontSizes.md, fontWeight: '600', color: theme.colors.text },
+  consultantMeta: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 1 },
+  consultantPaid: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  consultantAmount: { fontSize: theme.fontSizes.md, fontWeight: '700', color: '#2E7D32' },
 });

@@ -125,7 +125,7 @@ function CreateBillScreen({ route, navigation }) {
     <body>
       <div class="header">
         <div class="clinic">
-          <h1>🦷 VEB Dental Care & Implant Centre</h1>
+          <h1>🦷 VEB DENTAL CARE</h1>
           <p style="font-size:12px;color:#666">Professional Dental Services</p>
         </div>
         <div style="text-align:right">
@@ -155,7 +155,7 @@ function CreateBillScreen({ route, navigation }) {
       </div>
       ${paymentMode === 'emi' ? `<div class="emi-info">EMI Plan: ${emiMonths} months × ₹${emiAmount.toFixed(0)} per month</div>` : ''}
       ${notes ? `<p style="font-size:12px;color:#666;margin-bottom:12px">Notes: ${notes}</p>` : ''}
-      <div class="footer">Thank you for choosing VEB Dental Care & Implant Centre<br>For queries: contact clinic</div>
+      <div class="footer">Thank you for choosing VEB DENTAL CARE<br>For queries: contact clinic</div>
     </body>
     </html>
   `;

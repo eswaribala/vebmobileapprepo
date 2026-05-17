@@ -1,7 +1,5 @@
 import axios from 'axios';
 
-// Change this to your computer's local IP address when running backend
-// e.g., 'http://192.168.1.100:3000/api'
 export const BASE_URL = 'https://vebdentalbackend-production.up.railway.app/api';
 
 const api = axios.create({
@@ -10,6 +8,15 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Call this after login/logout to attach or remove the Bearer token
+export function setAuthToken(token) {
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+  }
+}
+
 api.interceptors.response.use(
   (res) => res.data,
   (err) => {
@@ -17,6 +24,13 @@ api.interceptors.response.use(
     return Promise.reject(new Error(msg));
   }
 );
+
+// Auth
+export const authAPI = {
+  login: (email, password) => api.post('/auth/login', { email, password }),
+  signup: (data) => api.post('/auth/signup', data),
+  me: () => api.get('/auth/me'),
+};
 
 // Patients
 export const patientsAPI = {
@@ -51,6 +65,7 @@ export const staffAPI = {
 export const appointmentsAPI = {
   getAll: (params) => api.get('/appointments', { params }),
   getToday: () => api.get('/appointments/today'),
+  getReminders: () => api.get('/appointments/reminders/tomorrow'),
   getById: (id) => api.get(`/appointments/${id}`),
   create: (data) => api.post('/appointments', data),
   update: (id, data) => api.put(`/appointments/${id}`, data),
@@ -81,6 +96,16 @@ export const diagnosisAPI = {
   addPrescription: (diagId, data) => api.post(`/diagnosis/${diagId}/prescriptions`, data),
   getPrescriptions: (diagId) => api.get(`/diagnosis/${diagId}/prescriptions`),
   getPatientTreatments: (patientId) => api.get(`/diagnosis/patient/${patientId}/treatments`),
+};
+
+// Consultants
+export const consultantAPI = {
+  getPaymentsSummary: () => api.get('/consultants/payments/summary'),
+  getAppointments: (id) => api.get(`/consultants/${id}/appointments`),
+  getPayments: (id) => api.get(`/consultants/${id}/payments`),
+  addPayment: (id, data) => api.post(`/consultants/${id}/payments`, data),
+  deletePayment: (paymentId) => api.delete(`/consultants/payments/${paymentId}`),
+  getReminders: () => api.get('/consultants/reminders/upcoming'),
 };
 
 // Billing
