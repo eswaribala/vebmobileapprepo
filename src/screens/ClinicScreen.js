@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../utils/theme';
+import { useAuth, isOwner, canApproveSignups } from '../context/AuthContext';
 
 function ClinicOption({ icon, title, subtitle, color, onPress }) {
   return (
@@ -19,6 +20,7 @@ function ClinicOption({ icon, title, subtitle, color, onPress }) {
 }
 
 export default function ClinicScreen({ navigation }) {
+  const { user } = useAuth();
   return (
     <ScrollView style={styles.container}>
       <View style={styles.banner}>
@@ -26,6 +28,15 @@ export default function ClinicScreen({ navigation }) {
         <Text style={styles.bannerTitle}>Clinic Management</Text>
         <Text style={styles.bannerSub}>Manage doctors, consultants, managers & staff</Text>
       </View>
+
+      {/* Owner-only section */}
+      {canApproveSignups(user?.role) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{isOwner(user?.role) ? 'Owner Controls' : 'Admin Controls'}</Text>
+          <ClinicOption icon="person-add-sharp" title="Signup Requests" subtitle="Approve or reject pending accounts"
+            color="#C62828" onPress={() => navigation.navigate('SignupRequests')} />
+        </View>
+      )}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Staff Management</Text>

@@ -14,22 +14,48 @@ const STATUS_COLORS = {
   cancelled: { bg: '#FFEBEE', text: '#C62828' },
 };
 
-function sendReminder(appt) {
-  if (!appt.mobile) { Alert.alert('No Mobile', 'No mobile number saved for this patient.'); return; }
-  const dateObj = new Date(appt.appointment_date + 'T00:00:00');
-  const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+function buildPatientMsg(appt) {
+  const dateStr = new Date(appt.appointment_date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const branch = appt.clinic_branch || 'Avadi';
-  const message =
+  const provider = appt.consultant_name || appt.doctor_name || '';
+  return (
     `Dear ${appt.first_name},\n\n` +
     `Reminder: You have an appointment at VEB DENTAL CARE, ${branch}.\n\n` +
     `📅 Date: ${dateStr}\n` +
     `⏰ Time: ${appt.appointment_time}\n` +
-    `👨‍⚕️ Doctor: ${appt.doctor_name}\n` +
+    (provider ? `👨‍⚕️ Provider: ${provider}\n` : '') +
     `🦷 Purpose: ${appt.purpose || 'Consultation'}\n\n` +
     `Please arrive 10 minutes early. Contact us if you need to reschedule.\n\n` +
-    `VEB DENTAL CARE, ${branch}`;
+    `VEB DENTAL CARE, ${branch}`
+  );
+}
+
+function buildProviderMsg(appt) {
+  const dateStr = new Date(appt.appointment_date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const branch = appt.clinic_branch || 'Avadi';
+  return (
+    `Dear Dr. ${appt.consultant_name || appt.doctor_name},\n\n` +
+    `You have an appointment at VEB DENTAL CARE, ${branch}.\n\n` +
+    `👤 Patient: ${appt.first_name} ${appt.last_name}\n` +
+    `🦷 Purpose: ${appt.purpose || 'Consultation'}\n` +
+    `📅 Date: ${dateStr}\n` +
+    `⏰ Time: ${appt.appointment_time}\n\n` +
+    `Please be available on time.\n\nVEB DENTAL CARE Management`
+  );
+}
+
+function sendReminder(appt) {
+  if (!appt.mobile) { Alert.alert('No Mobile', 'No mobile number saved for this patient.'); return; }
   const phone = `91${appt.mobile.replace(/\D/g, '')}`;
-  Linking.openURL(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`)
+  Linking.openURL(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(buildPatientMsg(appt))}`)
+    .catch(() => Alert.alert('WhatsApp Not Found', 'Please install WhatsApp to send reminders.'));
+}
+
+function sendProviderReminder(appt) {
+  const providerMobile = appt.consultant_mobile || appt.doctor_mobile;
+  if (!providerMobile) { Alert.alert('No Mobile', 'No mobile number saved for this provider.'); return; }
+  const phone = `91${providerMobile.replace(/\D/g, '')}`;
+  Linking.openURL(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(buildProviderMsg(appt))}`)
     .catch(() => Alert.alert('WhatsApp Not Found', 'Please install WhatsApp to send reminders.'));
 }
 
@@ -46,7 +72,7 @@ function AppointmentCard({ item, onPress, onStatusChange }) {
       <View style={styles.cardContent}>
         <Text style={styles.patientName}>{item.first_name} {item.last_name}</Text>
         <Text style={styles.patientId}>{item.p_id} · {item.mobile}</Text>
-        <Text style={styles.doctor}>{item.doctor_name}</Text>
+        <Text style={styles.doctor}>{item.consultant_name || item.doctor_name || '—'}</Text>
         <Text style={styles.purpose}>{item.purpose || 'General Consultation'}</Text>
         {item.clinic_branch ? <Text style={styles.branch}>{item.clinic_branch}</Text> : null}
       </View>
@@ -59,6 +85,11 @@ function AppointmentCard({ item, onPress, onStatusChange }) {
             <TouchableOpacity style={styles.waBtn} onPress={() => sendReminder(item)}>
               <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
             </TouchableOpacity>
+            {(item.consultant_mobile || item.doctor_mobile) ? (
+              <TouchableOpacity style={[styles.waBtn, { backgroundColor: '#E3F2FD' }]} onPress={() => sendProviderReminder(item)}>
+                <Ionicons name="person" size={15} color={theme.colors.primary} />
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity style={styles.completeBtn} onPress={() => onStatusChange(item.id, 'completed')}>
               <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
             </TouchableOpacity>

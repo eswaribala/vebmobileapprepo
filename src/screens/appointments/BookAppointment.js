@@ -27,6 +27,7 @@ export default function BookAppointmentScreen({ route, navigation }) {
   const [doctors, setDoctors] = useState([]);
   const [consultants, setConsultants] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(prefPatient || null);
+  const [providerType, setProviderType] = useState('doctor'); // 'doctor' | 'consultant'
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [selectedConsultant, setSelectedConsultant] = useState(null);
   const [clinicBranch, setClinicBranch] = useState('Avadi');
@@ -44,7 +45,7 @@ export default function BookAppointmentScreen({ route, navigation }) {
       setPatients(pRes.data || []);
       setDoctors(dRes.data || []);
       setConsultants((sRes.data || []).filter(s => s.role === 'Consultant'));
-      if (dRes.data?.length > 0) setSelectedDoctor(dRes.data[0]);
+      // No auto-select — user must choose explicitly
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -54,20 +55,21 @@ export default function BookAppointmentScreen({ route, navigation }) {
 
   const handleSave = async () => {
     if (!selectedPatient) { Alert.alert('Error', 'Please select a patient'); return; }
-    if (!selectedDoctor) { Alert.alert('Error', 'Please select a doctor'); return; }
+    if (providerType === 'doctor' && !selectedDoctor) { Alert.alert('Error', 'Please select a doctor'); return; }
+    if (providerType === 'consultant' && !selectedConsultant) { Alert.alert('Error', 'Please select a consultant'); return; }
     if (!time) { Alert.alert('Error', 'Please select an appointment time'); return; }
     if (!purpose) { Alert.alert('Error', 'Please select appointment purpose'); return; }
     setSaving(true);
     try {
       await appointmentsAPI.create({
         patient_id: selectedPatient.id,
-        doctor_id: selectedDoctor.id,
+        doctor_id: providerType === 'doctor' ? selectedDoctor?.id : null,
+        consultant_id: providerType === 'consultant' ? selectedConsultant?.id : null,
         appointment_date: date,
         appointment_time: time,
         purpose,
         notes,
         clinic_branch: clinicBranch,
-        consultant_id: selectedConsultant?.id || null,
       });
       Alert.alert('Success', 'Appointment booked successfully!', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -115,22 +117,51 @@ export default function BookAppointmentScreen({ route, navigation }) {
         )}
       </View>
 
-      {/* Doctor Selection */}
+      {/* Provider toggle: Doctor OR Consultant */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Select Doctor</Text>
-        {doctors.map(d => (
-          <TouchableOpacity key={d.id} style={[styles.doctorCard, selectedDoctor?.id === d.id && styles.doctorCardActive]}
-            onPress={() => setSelectedDoctor(d)}>
-            <View style={[styles.doctorAvatar, selectedDoctor?.id === d.id && styles.doctorAvatarActive]}>
-              <Ionicons name="person" size={20} color={selectedDoctor?.id === d.id ? '#fff' : theme.colors.primary} />
-            </View>
-            <View style={styles.doctorInfo}>
-              <Text style={[styles.doctorName, selectedDoctor?.id === d.id && { color: theme.colors.primary }]}>{d.name}</Text>
-              <Text style={styles.doctorSpec}>{d.specialization}</Text>
-            </View>
-            {selectedDoctor?.id === d.id && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
-          </TouchableOpacity>
-        ))}
+        <Text style={styles.sectionTitle}>Provider</Text>
+        <View style={styles.branchRow}>
+          {[{ key: 'doctor', label: 'Doctor', icon: 'person' }, { key: 'consultant', label: 'Consultant', icon: 'briefcase' }].map(p => (
+            <TouchableOpacity key={p.key}
+              style={[styles.branchBtn, providerType === p.key && styles.branchBtnActive]}
+              onPress={() => { setProviderType(p.key); setSelectedDoctor(null); setSelectedConsultant(null); }}>
+              <Ionicons name={p.icon} size={16} color={providerType === p.key ? '#fff' : theme.colors.primary} />
+              <Text style={[styles.branchText, providerType === p.key && styles.branchTextActive]}>{p.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {providerType === 'doctor' ? (
+          doctors.map(d => (
+            <TouchableOpacity key={d.id} style={[styles.doctorCard, selectedDoctor?.id === d.id && styles.doctorCardActive]}
+              onPress={() => setSelectedDoctor(d)}>
+              <View style={[styles.doctorAvatar, selectedDoctor?.id === d.id && styles.doctorAvatarActive]}>
+                <Ionicons name="person" size={20} color={selectedDoctor?.id === d.id ? '#fff' : theme.colors.primary} />
+              </View>
+              <View style={styles.doctorInfo}>
+                <Text style={[styles.doctorName, selectedDoctor?.id === d.id && { color: theme.colors.primary }]}>{d.name}</Text>
+                <Text style={styles.doctorSpec}>{d.specialization}</Text>
+              </View>
+              {selectedDoctor?.id === d.id && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
+            </TouchableOpacity>
+          ))
+        ) : (
+          consultants.length === 0
+            ? <Text style={styles.doctorSpec}>No consultants added yet</Text>
+            : consultants.map(c => (
+              <TouchableOpacity key={c.id} style={[styles.doctorCard, selectedConsultant?.id === c.id && styles.doctorCardActive]}
+                onPress={() => setSelectedConsultant(c)}>
+                <View style={[styles.doctorAvatar, selectedConsultant?.id === c.id && styles.doctorAvatarActive]}>
+                  <Ionicons name="briefcase" size={20} color={selectedConsultant?.id === c.id ? '#fff' : '#0277BD'} />
+                </View>
+                <View style={styles.doctorInfo}>
+                  <Text style={[styles.doctorName, selectedConsultant?.id === c.id && { color: theme.colors.primary }]}>Dr. {c.name}</Text>
+                  <Text style={styles.doctorSpec}>{c.department || 'Consultant'}</Text>
+                </View>
+                {selectedConsultant?.id === c.id && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
+              </TouchableOpacity>
+            ))
+        )}
       </View>
 
       {/* Clinic Branch */}
@@ -148,39 +179,6 @@ export default function BookAppointmentScreen({ route, navigation }) {
           ))}
         </View>
       </View>
-
-      {/* Consultant (optional) */}
-      {consultants.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Consultant (Optional)</Text>
-          <TouchableOpacity
-            style={[styles.doctorCard, !selectedConsultant && styles.doctorCardActive]}
-            onPress={() => setSelectedConsultant(null)}>
-            <View style={[styles.doctorAvatar, !selectedConsultant && styles.doctorAvatarActive]}>
-              <Ionicons name="close" size={18} color={!selectedConsultant ? '#fff' : theme.colors.textSecondary} />
-            </View>
-            <View style={styles.doctorInfo}>
-              <Text style={[styles.doctorName, !selectedConsultant && { color: theme.colors.primary }]}>None</Text>
-              <Text style={styles.doctorSpec}>No consultant for this appointment</Text>
-            </View>
-            {!selectedConsultant && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
-          </TouchableOpacity>
-          {consultants.map(c => (
-            <TouchableOpacity key={c.id}
-              style={[styles.doctorCard, selectedConsultant?.id === c.id && styles.doctorCardActive]}
-              onPress={() => setSelectedConsultant(c)}>
-              <View style={[styles.doctorAvatar, selectedConsultant?.id === c.id && styles.doctorAvatarActive]}>
-                <Ionicons name="person" size={20} color={selectedConsultant?.id === c.id ? '#fff' : '#0277BD'} />
-              </View>
-              <View style={styles.doctorInfo}>
-                <Text style={[styles.doctorName, selectedConsultant?.id === c.id && { color: theme.colors.primary }]}>Dr. {c.name}</Text>
-                <Text style={styles.doctorSpec}>{c.department || 'Consultant'}</Text>
-              </View>
-              {selectedConsultant?.id === c.id && <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />}
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
 
       {/* Date & Time */}
       <View style={styles.section}>

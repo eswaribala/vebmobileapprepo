@@ -35,7 +35,7 @@ function AppointmentItem({ item, onPress }) {
       </View>
       <View style={styles.apptInfo}>
         <Text style={styles.apptName}>{item.first_name} {item.last_name}</Text>
-        <Text style={styles.apptDoctor}>{item.doctor_name} · {item.purpose || 'Consultation'}</Text>
+        <Text style={styles.apptDoctor}>{item.consultant_name || item.doctor_name || '—'} · {item.purpose || 'Consultation'}</Text>
       </View>
       <View style={[styles.apptBadge, { backgroundColor: statusColors[item.status] + '20' }]}>
         <Text style={[styles.apptStatus, { color: statusColors[item.status] }]}>
@@ -79,24 +79,37 @@ export default function DashboardScreen({ navigation }) {
   };
 
   const sendPatientReminder = (appt) => {
-    if (!appt.mobile) {
-      Alert.alert('No Mobile', 'No mobile number saved for this patient.');
-      return;
-    }
-    const dateObj = new Date(appt.appointment_date + 'T00:00:00');
-    const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    if (!appt.mobile) { Alert.alert('No Mobile', 'No mobile number saved for this patient.'); return; }
+    const dateStr = new Date(appt.appointment_date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const branch = appt.clinic_branch || 'Avadi';
+    const provider = appt.consultant_name || appt.doctor_name || '';
     const message =
       `Dear ${appt.first_name},\n\n` +
       `Reminder: You have an appointment at VEB DENTAL CARE, ${branch}.\n\n` +
       `📅 Date: ${dateStr}\n` +
       `⏰ Time: ${appt.appointment_time}\n` +
-      `👨‍⚕️ Doctor: ${appt.doctor_name}\n` +
+      (provider ? `👨‍⚕️ Provider: ${provider}\n` : '') +
       `🦷 Purpose: ${appt.purpose || 'Consultation'}\n\n` +
-      `Please arrive 10 minutes early. Contact us if you need to reschedule.\n\n` +
-      `VEB DENTAL CARE, ${branch}`;
-    const phone = `91${appt.mobile.replace(/\D/g, '')}`;
-    Linking.openURL(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`)
+      `Please arrive 10 minutes early. Contact us if you need to reschedule.\n\nVEB DENTAL CARE, ${branch}`;
+    Linking.openURL(`whatsapp://send?phone=91${appt.mobile.replace(/\D/g, '')}&text=${encodeURIComponent(message)}`)
+      .catch(() => Alert.alert('WhatsApp Not Found', 'Please install WhatsApp to send reminders.'));
+  };
+
+  const sendProviderReminder = (appt) => {
+    const providerMobile = appt.consultant_mobile || appt.doctor_mobile;
+    const providerName = appt.consultant_name || appt.doctor_name;
+    if (!providerMobile) { Alert.alert('No Mobile', 'No mobile number saved for this provider.'); return; }
+    const dateStr = new Date(appt.appointment_date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const branch = appt.clinic_branch || 'Avadi';
+    const message =
+      `Dear Dr. ${providerName},\n\n` +
+      `You have an appointment at VEB DENTAL CARE, ${branch}.\n\n` +
+      `👤 Patient: ${appt.first_name} ${appt.last_name}\n` +
+      `🦷 Purpose: ${appt.purpose || 'Consultation'}\n` +
+      `📅 Date: ${dateStr}\n` +
+      `⏰ Time: ${appt.appointment_time}\n\n` +
+      `Please be available on time.\n\nVEB DENTAL CARE Management`;
+    Linking.openURL(`whatsapp://send?phone=91${providerMobile.replace(/\D/g, '')}&text=${encodeURIComponent(message)}`)
       .catch(() => Alert.alert('WhatsApp Not Found', 'Please install WhatsApp to send reminders.'));
   };
 
@@ -250,10 +263,18 @@ export default function DashboardScreen({ navigation }) {
                 <Text style={styles.reminderPurpose}>{appt.purpose || 'Consultation'} · {appt.doctor_name}</Text>
                 <Text style={styles.reminderMobile}>{appt.mobile}</Text>
               </View>
-              <TouchableOpacity style={styles.waSendBtn} onPress={() => sendPatientReminder(appt)}>
-                <Ionicons name="logo-whatsapp" size={18} color="#fff" />
-                <Text style={styles.waSendText}>Send</Text>
-              </TouchableOpacity>
+              <View style={{ gap: 6 }}>
+                <TouchableOpacity style={styles.waSendBtn} onPress={() => sendPatientReminder(appt)}>
+                  <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                  <Text style={styles.waSendText}>Patient</Text>
+                </TouchableOpacity>
+                {(appt.consultant_mobile || appt.doctor_mobile) ? (
+                  <TouchableOpacity style={[styles.waSendBtn, { backgroundColor: theme.colors.primary }]} onPress={() => sendProviderReminder(appt)}>
+                    <Ionicons name="person" size={14} color="#fff" />
+                    <Text style={styles.waSendText}>Doctor</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
           ))
         )}

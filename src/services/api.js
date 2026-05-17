@@ -98,6 +98,13 @@ export const diagnosisAPI = {
   getPatientTreatments: (patientId) => api.get(`/diagnosis/patient/${patientId}/treatments`),
 };
 
+// Owner / approval
+export const ownerAPI = {
+  getPending: () => api.get('/auth/pending'),
+  approve: (id) => api.put(`/auth/approve/${id}`),
+  reject: (id) => api.delete(`/auth/reject/${id}`),
+};
+
 // Consultants
 export const consultantAPI = {
   getPaymentsSummary: () => api.get('/consultants/payments/summary'),

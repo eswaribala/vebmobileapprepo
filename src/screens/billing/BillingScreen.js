@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, FlatList, RefreshControl
@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { theme } from '../../utils/theme';
-import { billingAPI, patientsAPI } from '../../services/api';
+import { billingAPI, patientsAPI, diagnosisAPI } from '../../services/api';
 
 const PAYMENT_MODES = [
   { key: 'cash', label: 'Cash', icon: 'cash', color: '#2E7D32' },
@@ -21,9 +21,9 @@ const EMI_OPTIONS = [3, 6, 9, 12, 18, 24];
 
 // ─── Bill Creation Form ───────────────────────────────────────────────────────
 function CreateBillScreen({ route, navigation }) {
-  const { patient, plans = [] } = route.params || {};
+  const { patient, plans: initialPlans = [] } = route.params || {};
   const [billItems, setBillItems] = useState(
-    plans.map(p => ({
+    initialPlans.map(p => ({
       id: p.id,
       description: p.description || p.treatment_type,
       tooth: p.tooth_number,
@@ -31,6 +31,25 @@ function CreateBillScreen({ route, navigation }) {
       included: true,
     }))
   );
+  const [loadingPlans, setLoadingPlans] = useState(initialPlans.length === 0 && !!patient);
+
+  // Auto-fetch treatment plans if none were passed (e.g. navigated from patient button)
+  useEffect(() => {
+    if (initialPlans.length > 0 || !patient) return;
+    diagnosisAPI.getPatientTreatments(patient.id)
+      .then(res => {
+        const plans = (res.data || []).filter(p => p.status !== 'completed');
+        setBillItems(plans.map(p => ({
+          id: p.id,
+          description: p.description || p.treatment_type,
+          tooth: p.tooth_number,
+          amount: parseFloat(p.cost) || 0,
+          included: true,
+        })));
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPlans(false));
+  }, []);
   const [extraItems, setExtraItems] = useState([]);
   const [discount, setDiscount] = useState('0');
   const [paymentMode, setPaymentMode] = useState('cash');
@@ -174,6 +193,7 @@ function CreateBillScreen({ route, navigation }) {
       {/* Bill Items */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Bill Items</Text>
+        {loadingPlans && <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginBottom: 8 }} />}
         {billItems.map((item, i) => (
           <View key={i} style={styles.billItem}>
             <TouchableOpacity style={[styles.checkbox, item.included && styles.checkboxChecked]} onPress={() => toggleItem(i)}>

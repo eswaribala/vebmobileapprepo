@@ -22,9 +22,12 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      // Navigation handled automatically by AppNavigator when user state changes
     } catch (err) {
-      Alert.alert('Login Failed', err.message || 'Invalid credentials');
+      if (err.pending) {
+        navigation.navigate('PendingApproval');
+      } else {
+        Alert.alert('Login Failed', err.message || 'Invalid credentials');
+      }
     }
     setLoading(false);
   };

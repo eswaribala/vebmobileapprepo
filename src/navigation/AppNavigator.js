@@ -10,6 +10,8 @@ import { useAuth, isFullAccess } from '../context/AuthContext';
 // Auth screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
+import PendingApprovalScreen from '../screens/auth/PendingApprovalScreen';
+import SignupRequestsScreen from '../screens/owner/SignupRequestsScreen';
 
 // Main screens
 import DashboardScreen from '../screens/Dashboard';
@@ -99,6 +101,7 @@ function ClinicStack() {
       <Stack.Screen name="ManagerList" component={ManagerListScreen} options={{ title: 'Managers' }} />
       <Stack.Screen name="ManagerForm" component={ManagerFormScreen} options={{ title: 'Manager Details' }} />
       <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
+      <Stack.Screen name="SignupRequests" component={SignupRequestsScreen} options={{ title: 'Signup Requests' }} />
     </Stack.Navigator>
   );
 }
@@ -205,6 +208,7 @@ function AuthStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
+      <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
     </Stack.Navigator>
   );
 }

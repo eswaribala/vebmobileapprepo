@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { theme } from '../../utils/theme';
 
 const ROLES = [
+  { value: 'owner',          label: 'Owner' },
   { value: 'doctor',         label: 'Doctor' },
   { value: 'manager',        label: 'Manager' },
   { value: 'receptionist',   label: 'Receptionist' },
@@ -43,7 +44,11 @@ export default function SignupScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      await signup(name.trim(), email.trim(), password, role);
+      const result = await signup(name.trim(), email.trim(), password, role);
+      if (result.pending) {
+        navigation.replace('PendingApproval');
+      }
+      // If not pending, AuthContext already set the user and AppNavigator will redirect automatically
     } catch (err) {
       Alert.alert('Signup Failed', err.message || 'Could not create account');
     }
@@ -121,14 +126,18 @@ export default function SignupScreen({ navigation }) {
           {role ? (
             <View style={styles.accessNote}>
               <Ionicons
-                name={['doctor', 'manager'].includes(role) ? 'shield-checkmark' : 'person'}
+                name={['owner', 'doctor', 'manager'].includes(role) ? 'shield-checkmark' : 'person'}
                 size={14}
-                color={['doctor', 'manager'].includes(role) ? '#2E7D32' : '#1565C0'}
+                color={role === 'owner' ? '#C62828' : ['doctor', 'manager'].includes(role) ? '#2E7D32' : '#1565C0'}
               />
-              <Text style={[styles.accessNoteText, { color: ['doctor', 'manager'].includes(role) ? '#2E7D32' : '#1565C0' }]}>
-                {['doctor', 'manager'].includes(role)
-                  ? 'Full access · All modules visible'
-                  : 'Standard access · Patients, Appointments & Attendance'}
+              <Text style={[styles.accessNoteText, { color: role === 'owner' ? '#C62828' : ['doctor', 'manager'].includes(role) ? '#2E7D32' : '#1565C0' }]}>
+                {role === 'owner'
+                  ? 'Super admin · Full access · Auto-approved'
+                  : ['manager'].includes(role)
+                    ? 'Full access · Auto-approved'
+                    : ['doctor'].includes(role)
+                      ? 'Full access · Requires owner approval'
+                      : 'Standard access · Requires owner approval'}
               </Text>
             </View>
           ) : null}

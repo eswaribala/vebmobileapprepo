@@ -32,6 +32,12 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const res = await authAPI.login(email, password);
+    // res.pending means account exists but awaiting approval — surface as a typed error
+    if (res.pending) {
+      const err = new Error(res.error || 'Account pending approval');
+      err.pending = true;
+      throw err;
+    }
     await SecureStore.setItemAsync(TOKEN_KEY, res.token);
     setAuthToken(res.token);
     setUser(res.user);
@@ -40,10 +46,11 @@ export function AuthProvider({ children }) {
 
   const signup = async (name, email, password, role) => {
     const res = await authAPI.signup({ name, email, password, role });
+    if (res.pending) return { pending: true }; // caller navigates to PendingApproval
     await SecureStore.setItemAsync(TOKEN_KEY, res.token);
     setAuthToken(res.token);
     setUser(res.user);
-    return res.user;
+    return { pending: false, user: res.user };
   };
 
   const logout = async () => {
@@ -61,5 +68,7 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => useContext(AuthContext);
 
-// Returns true if the role has full clinic access
-export const isFullAccess = (role) => ['doctor', 'manager'].includes(role);
+// Roles with full clinic access
+export const isFullAccess = (role) => ['owner', 'doctor', 'manager'].includes(role);
+export const isOwner = (role) => role === 'owner';
+export const canApproveSignups = (role) => ['owner', 'manager'].includes(role);
