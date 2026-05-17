@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Svg, Rect, Ellipse, Path, Text as SvgText, Circle } from 'react-native-svg';
 import { theme, toothConditions } from '../../utils/theme';
-import { diagnosisAPI, doctorsAPI } from '../../services/api';
+import { diagnosisAPI, doctorsAPI, staffAPI } from '../../services/api';
 
 // ─── Dental chart data ────────────────────────────────────────────────────────
 // FDI notation: upper right 11-18, upper left 21-28, lower left 31-38, lower right 41-48
@@ -147,8 +147,8 @@ function DentalChart({ toothChart, selectedTooth, onToothPress }) {
 // ─── Main Diagnosis Screen ────────────────────────────────────────────────────
 export default function DiagnosisScreen({ route, navigation }) {
   const { patient } = route.params;
-  const [doctors, setDoctors] = useState([]);
-  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [providers, setProviders] = useState([]); // combined doctors + consultants
+  const [selectedProvider, setSelectedProvider] = useState(null); // { id, name, type, ...}
   const [toothChart, setToothChart] = useState({});
   const [selectedTooth, setSelectedTooth] = useState(null);
   const [conditionModal, setConditionModal] = useState(false);
@@ -158,9 +158,12 @@ export default function DiagnosisScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    doctorsAPI.getAll().then(res => {
-      setDoctors(res.data || []);
-      if (res.data?.length) setSelectedDoctor(res.data[0]);
+    Promise.all([doctorsAPI.getAll(), staffAPI.getAll()]).then(([dRes, sRes]) => {
+      const docs = (dRes.data || []).map(d => ({ ...d, type: 'doctor' }));
+      const cons = (sRes.data || []).filter(s => s.role === 'Consultant').map(c => ({ ...c, type: 'consultant' }));
+      const all = [...docs, ...cons];
+      setProviders(all);
+      if (all.length) setSelectedProvider(all[0]);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -189,12 +192,13 @@ export default function DiagnosisScreen({ route, navigation }) {
   const markedCount = Object.keys(toothChart).length;
 
   const handleSave = async () => {
-    if (!selectedDoctor) { Alert.alert('Error', 'Please select a doctor'); return; }
+    if (!selectedProvider) { Alert.alert('Error', 'Please select a doctor or consultant'); return; }
     setSaving(true);
     try {
       const res = await diagnosisAPI.create({
         patient_id: patient.id,
-        doctor_id: selectedDoctor.id,
+        doctor_id: selectedProvider.type === 'doctor' ? selectedProvider.id : null,
+        consultant_id: selectedProvider.type === 'consultant' ? selectedProvider.id : null,
         visit_date: new Date().toISOString().split('T')[0],
         chief_complaint: complaint,
         clinical_notes: notes,
@@ -206,7 +210,7 @@ export default function DiagnosisScreen({ route, navigation }) {
             patient,
             diagnosisId: res.data.id,
             toothChart,
-            doctorId: selectedDoctor.id,
+            provider: selectedProvider,
           })
         },
       ]);
@@ -230,18 +234,24 @@ export default function DiagnosisScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Doctor Selection */}
+        {/* Provider Selection (Doctor or Consultant) */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Consulting Doctor</Text>
+          <Text style={styles.cardTitle}>Treating Provider</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.doctorScroll}>
-            {doctors.map(d => (
-              <TouchableOpacity key={d.id}
-                style={[styles.doctorPill, selectedDoctor?.id === d.id && styles.doctorPillActive]}
-                onPress={() => setSelectedDoctor(d)}>
-                <Ionicons name="person" size={14} color={selectedDoctor?.id === d.id ? '#fff' : theme.colors.primary} />
-                <Text style={[styles.doctorPillText, selectedDoctor?.id === d.id && { color: '#fff' }]}>{d.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {providers.map(p => {
+              const isSelected = selectedProvider?.id === p.id && selectedProvider?.type === p.type;
+              const isConsultant = p.type === 'consultant';
+              return (
+                <TouchableOpacity key={`${p.type}-${p.id}`}
+                  style={[styles.doctorPill, isSelected && styles.doctorPillActive, isConsultant && !isSelected && { borderColor: '#0277BD' }]}
+                  onPress={() => setSelectedProvider(p)}>
+                  <Ionicons name={isConsultant ? 'briefcase' : 'person'} size={14} color={isSelected ? '#fff' : isConsultant ? '#0277BD' : theme.colors.primary} />
+                  <Text style={[styles.doctorPillText, { color: isSelected ? '#fff' : isConsultant ? '#0277BD' : theme.colors.primary }]}>
+                    {isConsultant ? `${p.name} (C)` : p.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 

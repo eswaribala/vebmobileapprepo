@@ -280,6 +280,52 @@ export default function DashboardScreen({ navigation }) {
         )}
       </View>
 
+      {/* Provider Reminders (Doctor / Consultant) */}
+      {(() => {
+        const providerReminders = reminders.filter(a => a.consultant_mobile || a.doctor_mobile);
+        if (providerReminders.length === 0) return null;
+        return (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.reportTitleRow}>
+                <View style={[styles.reportIconWrap, { backgroundColor: '#E3F2FD' }]}>
+                  <Ionicons name="person" size={16} color={theme.colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.sectionTitle2}>Provider Reminders</Text>
+                  <Text style={styles.reminderSubtitle}>Tomorrow's provider notifications</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate('Appointments')}>
+                <Text style={styles.viewAll}>View All</Text>
+              </TouchableOpacity>
+            </View>
+            {providerReminders.map((appt) => {
+              const provName = appt.consultant_name || appt.doctor_name;
+              const provMobile = appt.consultant_mobile || appt.doctor_mobile;
+              return (
+                <View key={appt.id} style={styles.reminderRow}>
+                  <View style={[styles.reminderTime, { backgroundColor: '#E3F2FD' }]}>
+                    <Text style={[styles.reminderTimeText, { color: theme.colors.primary }]}>{appt.appointment_time}</Text>
+                    <Text style={[styles.reminderBranch, { color: theme.colors.primary }]}>{appt.clinic_branch || 'Avadi'}</Text>
+                  </View>
+                  <View style={styles.reminderInfo}>
+                    <Text style={styles.reminderName}>Dr. {provName}</Text>
+                    <Text style={styles.reminderPurpose}>{appt.purpose || 'Consultation'} · {appt.first_name} {appt.last_name}</Text>
+                    <Text style={styles.reminderMobile}>{provMobile}</Text>
+                  </View>
+                  <TouchableOpacity style={[styles.waSendBtn, { backgroundColor: theme.colors.primary }]}
+                    onPress={() => sendProviderReminder(appt)}>
+                    <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                    <Text style={styles.waSendText}>Send</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        );
+      })()}
+
       {/* Consultant Payment Report */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>

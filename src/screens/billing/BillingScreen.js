@@ -21,7 +21,8 @@ const EMI_OPTIONS = [3, 6, 9, 12, 18, 24];
 
 // ─── Bill Creation Form ───────────────────────────────────────────────────────
 function CreateBillScreen({ route, navigation }) {
-  const { patient, plans: initialPlans = [] } = route.params || {};
+  const { patient, plans: initialPlans = [], provider } = route.params || {};
+  const providerName = provider?.name ? `Dr. ${provider.name}` : null;
   const [billItems, setBillItems] = useState(
     initialPlans.map(p => ({
       id: p.id,
@@ -156,8 +157,8 @@ function CreateBillScreen({ route, navigation }) {
       <div class="patient-section">
         <div>
           <strong>${patient?.first_name} ${patient?.last_name}</strong><br>
-          ID: ${patient?.patient_id}<br>
-          Mobile: ${patient?.mobile}
+          ID: ${patient?.patient_id} | Mobile: ${patient?.mobile}
+          ${providerName ? `<br>Provider: <strong>${providerName}</strong>` : ''}
         </div>
         <div>
           <span class="payment-badge">${paymentMode.toUpperCase()}</span>

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { theme } from '../../utils/theme';
-import { diagnosisAPI, doctorsAPI } from '../../services/api';
+import { diagnosisAPI, doctorsAPI, staffAPI } from '../../services/api';
 
 const COMMON_MEDICATIONS = [
   { name: 'Ibuprofen 400mg', dosage: '1 tablet', frequency: 'TDS', duration: '3 days' },
@@ -39,8 +39,10 @@ function MedicationRow({ med, index, onChange, onDelete }) {
 }
 
 export default function PrescriptionScreen({ route, navigation }) {
-  const { patient, diagnosisId, doctorId } = route.params;
-  const [doctor, setDoctor] = useState(null);
+  const { patient, diagnosisId, provider, doctorId } = route.params;
+  // Support legacy doctorId param
+  const effectiveProvider = provider || (doctorId ? { id: doctorId, type: 'doctor' } : null);
+  const [providerData, setProviderData] = useState(null);
   const [medications, setMedications] = useState([]);
   const [instructions, setInstructions] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
@@ -49,10 +51,13 @@ export default function PrescriptionScreen({ route, navigation }) {
   const [savedRx, setSavedRx] = useState(null);
 
   useEffect(() => {
-    if (doctorId) {
-      doctorsAPI.getById(doctorId).then(res => setDoctor(res.data)).catch(() => {});
+    if (!effectiveProvider) return;
+    if (effectiveProvider.type === 'consultant') {
+      staffAPI.getById(effectiveProvider.id).then(res => setProviderData({ ...res.data, isConsultant: true })).catch(() => {});
+    } else {
+      doctorsAPI.getById(effectiveProvider.id).then(res => setProviderData(res.data)).catch(() => {});
     }
-  }, [doctorId]);
+  }, []);
 
   const addMedication = (med = null) => {
     setMedications(prev => [...prev, med || { name: '', dosage: '', frequency: '', duration: '' }]);
@@ -72,7 +77,7 @@ export default function PrescriptionScreen({ route, navigation }) {
     try {
       const res = await diagnosisAPI.addPrescription(diagnosisId, {
         patient_id: patient.id,
-        doctor_id: doctorId,
+        doctor_id: effectiveProvider?.type === 'doctor' ? effectiveProvider?.id : null,
         rx_date: new Date().toISOString().split('T')[0],
         medications: JSON.stringify(medications),
         instructions,
@@ -133,10 +138,10 @@ export default function PrescriptionScreen({ route, navigation }) {
           <div class="clinic-sub">Professional Dental Care</div>
         </div>
         <div class="doctor-info">
-          <div class="doctor-name">${doctor?.name || ''}</div>
-          <div>${doctor?.qualification || ''}</div>
-          <div>${doctor?.specialization || ''}</div>
-          <div>Reg: ${doctor?.registration_no || ''}</div>
+          <div class="doctor-name">Dr. ${providerData?.name || ''}</div>
+          <div>${providerData?.qualification || (providerData?.isConsultant ? 'Consultant' : '')}</div>
+          <div>${providerData?.specialization || providerData?.department || ''}</div>
+          ${!providerData?.isConsultant && providerData?.registration_no ? `<div>Reg: ${providerData.registration_no}</div>` : ''}
         </div>
       </div>
       <div class="patient-info">

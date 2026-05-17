@@ -65,7 +65,9 @@ function TreatmentItem({ item, index, onEdit, onDelete }) {
 }
 
 export default function TreatmentPlanScreen({ route, navigation }) {
-  const { patient, diagnosisId, toothChart, doctorId } = route.params;
+  const { patient, diagnosisId, toothChart, provider, doctorId } = route.params;
+  // support legacy doctorId param (for older navigation calls)
+  const effectiveProvider = provider || (doctorId ? { id: doctorId, type: 'doctor' } : null);
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addModal, setAddModal] = useState(false);
@@ -122,7 +124,7 @@ export default function TreatmentPlanScreen({ route, navigation }) {
       } else {
         await diagnosisAPI.addTreatment(diagnosisId, {
           patient_id: patient.id,
-          doctor_id: doctorId,
+          doctor_id: effectiveProvider?.type === 'doctor' ? effectiveProvider?.id : null,
           tooth_number: form.tooth_number,
           treatment_type: form.treatment_type,
           description: form.description,
@@ -148,11 +150,11 @@ export default function TreatmentPlanScreen({ route, navigation }) {
   };
 
   const handlePrescription = () => {
-    navigation.navigate('Prescription', { patient, diagnosisId, doctorId });
+    navigation.navigate('Prescription', { patient, diagnosisId, provider: effectiveProvider });
   };
 
   const handleBill = () => {
-    navigation.navigate('Billing', { patient, plans, diagnosisId });
+    navigation.navigate('Billing', { patient, plans, diagnosisId, provider: effectiveProvider });
   };
 
   // Auto-add from chart
@@ -167,7 +169,7 @@ export default function TreatmentPlanScreen({ route, navigation }) {
         const treatType = TREATMENT_TYPES.find(t => t.key === data.condition);
         await diagnosisAPI.addTreatment(diagnosisId, {
           patient_id: patient.id,
-          doctor_id: doctorId,
+          doctor_id: effectiveProvider?.type === 'doctor' ? effectiveProvider?.id : null,
           tooth_number: tooth,
           treatment_type: data.condition,
           description: treatType?.label || data.condition,

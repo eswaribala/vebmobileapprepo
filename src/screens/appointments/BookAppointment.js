@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { theme } from '../../utils/theme';
+import { Linking } from 'react-native';
 import { appointmentsAPI, patientsAPI, doctorsAPI, staffAPI } from '../../services/api';
 
 const CLINIC_BRANCHES = ['Avadi', 'Thiruninravur'];
@@ -71,8 +72,49 @@ export default function BookAppointmentScreen({ route, navigation }) {
         notes,
         clinic_branch: clinicBranch,
       });
-      Alert.alert('Success', 'Appointment booked successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+
+      const provider = providerType === 'doctor' ? selectedDoctor : selectedConsultant;
+      const providerName = provider?.name || '';
+      const providerMobile = provider?.mobile;
+      const dateStr = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const clinic = `VEB DENTAL CARE, ${clinicBranch}`;
+
+      const patientMsg = encodeURIComponent(
+        `Dear ${selectedPatient.first_name},\n\nYour appointment is confirmed at ${clinic}.\n\n` +
+        `📅 Date: ${dateStr}\n⏰ Time: ${time}\n` +
+        (providerName ? `👨‍⚕️ Provider: Dr. ${providerName}\n` : '') +
+        `🦷 Purpose: ${purpose}\n\nPlease arrive 10 minutes early.\n\nVEB DENTAL CARE`
+      );
+
+      const providerMsg = providerMobile ? encodeURIComponent(
+        `Dear Dr. ${providerName},\n\nA new appointment has been scheduled for you at ${clinic}.\n\n` +
+        `👤 Patient: ${selectedPatient.first_name} ${selectedPatient.last_name}\n` +
+        `🦷 Purpose: ${purpose}\n📅 Date: ${dateStr}\n⏰ Time: ${time}\n\n` +
+        `Please be prepared.\n\nVEB DENTAL CARE Management`
+      ) : null;
+
+      const patientPhone = selectedPatient.mobile ? `91${selectedPatient.mobile.replace(/\D/g, '')}` : null;
+      const providerPhone = providerMobile ? `91${providerMobile.replace(/\D/g, '')}` : null;
+
+      Alert.alert('Appointment Booked! 🎉', 'Send WhatsApp confirmation?', [
+        { text: 'Skip', style: 'cancel', onPress: () => navigation.goBack() },
+        ...(patientPhone ? [{ text: '📱 Patient', onPress: () => {
+          Linking.openURL(`whatsapp://send?phone=${patientPhone}&text=${patientMsg}`)
+            .catch(() => {});
+          setTimeout(() => {
+            if (providerPhone && providerMsg) {
+              Alert.alert('Also notify provider?', `Send WhatsApp to Dr. ${providerName}?`, [
+                { text: 'No', style: 'cancel' },
+                { text: 'Yes', onPress: () => Linking.openURL(`whatsapp://send?phone=${providerPhone}&text=${providerMsg}`).catch(() => {}) },
+              ]);
+            }
+          }, 1000);
+          navigation.goBack();
+        }}] : []),
+        ...(providerPhone && providerMsg ? [{ text: `👨‍⚕️ Provider`, onPress: () => {
+          Linking.openURL(`whatsapp://send?phone=${providerPhone}&text=${providerMsg}`).catch(() => {});
+          navigation.goBack();
+        }}] : []),
       ]);
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to book appointment');
