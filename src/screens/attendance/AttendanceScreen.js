@@ -387,7 +387,7 @@ export default function AttendanceScreen({ navigation }) {
               onCheckOut={handleCheckOut}
               onMarkAbsent={handleMarkAbsent}
               canCheckIn={canCheckIn}
-              canEdit={isAdmin}
+              canEdit={true}
             />
           )}
           refreshControl={
