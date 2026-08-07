@@ -1,24 +1,47 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, RefreshControl
+  Alert, ActivityIndicator, RefreshControl, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from '@react-navigation/native';
 import { theme } from '../../utils/theme';
 import { patientsAPI } from '../../services/api';
 
-function InfoRow({ icon, label, value }) {
+function InfoRow({ icon, label, value, isPhone }) {
+  const handlePhoneTap = () => {
+    if (!value) return;
+    Alert.alert(value, null, [
+      { text: 'Call', onPress: () => Linking.openURL(`tel:${value}`) },
+      { text: 'Copy', onPress: async () => {
+          await Clipboard.setStringAsync(value);
+          Alert.alert('Copied', 'Phone number copied to clipboard');
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   return (
-    <View style={styles.infoRow}>
+    <TouchableOpacity
+      style={styles.infoRow}
+      onPress={isPhone && value ? handlePhoneTap : undefined}
+      activeOpacity={isPhone && value ? 0.6 : 1}
+    >
       <View style={styles.infoIcon}>
         <Ionicons name={icon} size={16} color={theme.colors.primary} />
       </View>
       <View style={styles.infoContent}>
         <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue}>{value || '—'}</Text>
+        <Text style={[styles.infoValue, isPhone && value && styles.phoneValue]}>
+          {value || '—'}
+        </Text>
       </View>
-    </View>
+      {isPhone && value && (
+        <Ionicons name="call-outline" size={16} color={theme.colors.primary} style={{ marginLeft: 4 }} />
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -118,12 +141,12 @@ export default function PatientDetailsScreen({ route, navigation }) {
         {/* Tab Content */}
         {tab === 'info' && (
           <View style={styles.card}>
-            <InfoRow icon="call" label="Mobile" value={patient.mobile} />
+            <InfoRow icon="call" label="Mobile" value={patient.mobile} isPhone />
             <InfoRow icon="calendar" label="Date of Birth" value={patient.dob} />
             <InfoRow icon="location" label="Address" value={patient.address} />
             <InfoRow icon="alert-circle" label="Allergies" value={patient.allergies} />
             <InfoRow icon="document-text" label="Medical History" value={patient.medical_history} />
-            <InfoRow icon="call" label="Emergency Contact" value={patient.emergency_contact} />
+            <InfoRow icon="call" label="Emergency Contact" value={patient.emergency_contact} isPhone />
           </View>
         )}
 
@@ -244,7 +267,8 @@ const styles = StyleSheet.create({
   infoIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   infoContent: { flex: 1 },
   infoLabel: { fontSize: 11, color: theme.colors.textSecondary, fontWeight: '600', marginBottom: 2 },
-  infoValue: { fontSize: theme.fontSizes.md, color: theme.colors.text },
+  infoValue:  { fontSize: theme.fontSizes.md, color: theme.colors.text },
+  phoneValue: { color: theme.colors.primary, textDecorationLine: 'underline' },
   historyItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.divider },
   historyDate: { fontSize: 12, color: theme.colors.textSecondary },
   historyTitle: { fontSize: theme.fontSizes.md, fontWeight: '600', color: theme.colors.text, marginTop: 2 },
