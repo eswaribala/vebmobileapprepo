@@ -36,6 +36,11 @@ function getClinicInRange(coords) {
 const getISTDate = () =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
+const getISTHour = () => {
+  const h = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false });
+  return parseInt(h, 10);
+};
+
 const isAttendanceRole = (role) =>
   role && role.toLowerCase() !== 'consultant';
 
@@ -60,7 +65,7 @@ const ROLE_COLORS = {
 };
 
 // ── Session row (Morning / Evening) ──────────────────────────────────────────
-function SessionRow({ label, iconName, iconColor, inTime, outTime, onIn, onOut, canCheckIn }) {
+function SessionRow({ label, iconName, iconColor, inTime, outTime, onIn, onOut, canCheckIn, sessionClosed }) {
   const hasIn  = !!inTime;
   const hasOut = !!outTime;
 
@@ -73,6 +78,11 @@ function SessionRow({ label, iconName, iconColor, inTime, outTime, onIn, onOut, 
           <View style={styles.sessionTimeChip}>
             <Ionicons name="log-in-outline" size={11} color={theme.colors.success} />
             <Text style={styles.sessionTimeText}>{inTime}</Text>
+          </View>
+        ) : sessionClosed ? (
+          <View style={styles.sessionMissedChip}>
+            <Ionicons name="close-circle" size={11} color={theme.colors.error} />
+            <Text style={styles.sessionMissedText}>Missed</Text>
           </View>
         ) : canCheckIn ? (
           <TouchableOpacity style={styles.sessionInBtn} onPress={onIn}>
@@ -100,7 +110,7 @@ function SessionRow({ label, iconName, iconColor, inTime, outTime, onIn, onOut, 
 }
 
 // ── Attendance row ────────────────────────────────────────────────────────────
-function AttendanceRow({ person, record, onCheckIn, onCheckOut, onMarkAbsent, canCheckIn, canEdit }) {
+function AttendanceRow({ person, record, onCheckIn, onCheckOut, onMarkAbsent, canCheckIn, canEdit, morningClosed, eveningClosed }) {
   const sc        = STATUS_CONFIG[record?.status] || null;
   const hasRecord = !!record;
   const roleColor = ROLE_COLORS[person.role] || ROLE_COLORS.default;
@@ -146,6 +156,7 @@ function AttendanceRow({ person, record, onCheckIn, onCheckOut, onMarkAbsent, ca
           onIn={() => onCheckIn(person, 'morning')}
           onOut={() => onCheckOut(person, 'morning')}
           canCheckIn={canCheckIn}
+          sessionClosed={morningClosed}
         />
         <SessionRow
           label="Evening"
@@ -156,6 +167,7 @@ function AttendanceRow({ person, record, onCheckIn, onCheckOut, onMarkAbsent, ca
           onIn={() => onCheckIn(person, 'evening')}
           onOut={() => onCheckOut(person, 'evening')}
           canCheckIn={canCheckIn}
+          sessionClosed={eveningClosed}
         />
       </View>
 
@@ -225,7 +237,19 @@ export default function AttendanceScreen({ navigation }) {
         ...staffList.filter(s => s.role === 'Manager'),
         ...staffList.filter(s => s.role !== 'Manager'),
       ]);
-      setRecords(aRes.data || []);
+
+      // After 8 PM auto-mark anyone with no record as absent, then reload
+      let attendanceRecords = aRes.data || [];
+      if (getISTHour() >= 20) {
+        try {
+          const res = await attendanceAPI.autoMarkAbsent();
+          if (res?.marked > 0) {
+            const fresh = await attendanceAPI.getToday();
+            attendanceRecords = fresh.data || [];
+          }
+        } catch {}
+      }
+      setRecords(attendanceRecords);
     } catch {}
     setLoading(false);
     setRefreshing(false);
@@ -388,6 +412,8 @@ export default function AttendanceScreen({ navigation }) {
               onMarkAbsent={handleMarkAbsent}
               canCheckIn={canCheckIn}
               canEdit={true}
+              morningClosed={getISTHour() >= 13}
+              eveningClosed={getISTHour() >= 20}
             />
           )}
           refreshControl={
@@ -622,7 +648,9 @@ const styles = StyleSheet.create({
   sessionBtnTxt: { fontSize: 12, fontWeight: '600' },
   sessionTimeChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: '#F3F4F6' },
   sessionTimeText: { fontSize: 12, color: theme.colors.text, fontWeight: '500' },
-  sessionDash:   { fontSize: 12, color: theme.colors.border, width: 20, textAlign: 'center' },
+  sessionDash:        { fontSize: 12, color: theme.colors.border, width: 20, textAlign: 'center' },
+  sessionMissedChip:  { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: theme.colors.errorLight },
+  sessionMissedText:  { fontSize: 12, fontWeight: '600', color: theme.colors.error },
 
   // Absent chip
   absentChip:   { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: theme.colors.errorLight },

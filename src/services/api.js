@@ -4,7 +4,7 @@ export const BASE_URL = 'https://vebdentalbackend-production.up.railway.app/api'
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -17,10 +17,25 @@ export function setAuthToken(token) {
   }
 }
 
+const MAX_RETRIES = 2;
+
 api.interceptors.response.use(
   (res) => res.data,
-  (err) => {
-    const msg = err.response?.data?.error || err.message || 'Network error';
+  async (err) => {
+    const config = err.config;
+    // Retry only on network/timeout errors, not on API responses (4xx/5xx)
+    const isNetworkError = !err.response && (err.code === 'ECONNABORTED' || err.message === 'Network Error');
+    // Only retry idempotent requests — retrying POST/PUT/DELETE after a timeout can
+    // create duplicate records if the original request actually succeeded server-side.
+    const isIdempotent = (config?.method || 'get').toLowerCase() === 'get';
+    if (isNetworkError && isIdempotent && config && (config._retryCount || 0) < MAX_RETRIES) {
+      config._retryCount = (config._retryCount || 0) + 1;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * config._retryCount));
+      return api(config);
+    }
+    const msg = err.response?.data?.error ||
+      (isNetworkError ? 'Unable to reach server. Please check your internet connection and try again.' : err.message) ||
+      'Network error';
     return Promise.reject(new Error(msg));
   }
 );
@@ -30,6 +45,7 @@ export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   signup: (data) => api.post('/auth/signup', data),
   me: () => api.get('/auth/me'),
+  changePassword: (current_password, new_password) => api.put('/auth/change-password', { current_password, new_password }),
 };
 
 // Patients
@@ -66,6 +82,7 @@ export const appointmentsAPI = {
   getAll: (params) => api.get('/appointments', { params }),
   getToday: () => api.get('/appointments/today'),
   getReminders: () => api.get('/appointments/reminders/tomorrow'),
+  getOwnerBlockedSlots: (date) => api.get('/appointments/owner-blocked-slots', { params: { date } }),
   getById: (id) => api.get(`/appointments/${id}`),
   create: (data) => api.post('/appointments', data),
   update: (id, data) => api.put(`/appointments/${id}`, data),
@@ -77,10 +94,17 @@ export const attendanceAPI = {
   getAll: (params) => api.get('/attendance', { params }),
   getToday: () => api.get('/attendance/today'),
   getSummary: (month, year) => api.get('/attendance/summary', { params: { month, year } }),
-  checkIn: (staff_id) => api.post('/attendance/checkin', { staff_id }),
-  checkOut: (staff_id) => api.post('/attendance/checkout', { staff_id }),
+  checkIn: (id, type = 'staff', session) => api.post('/attendance/checkin', {
+    ...(type === 'doctor' ? { doctor_id: id } : { staff_id: id }),
+    session,
+  }),
+  checkOut: (id, type = 'staff', session) => api.post('/attendance/checkout', {
+    ...(type === 'doctor' ? { doctor_id: id } : { staff_id: id }),
+    session,
+  }),
   save: (data) => api.post('/attendance', data),
   update: (id, data) => api.put(`/attendance/${id}`, data),
+  autoMarkAbsent: () => api.post('/attendance/auto-mark-absent'),
 };
 
 // Diagnosis
@@ -108,10 +132,13 @@ export const ownerAPI = {
 // Owner personal consulting
 export const ownerConsultingAPI = {
   getAppointments: (params) => api.get('/owner/appointments', { params }),
+  getByDate: (date) => api.get('/owner/appointments', { params: { date } }),
   addAppointment: (data) => api.post('/owner/appointments', data),
   updateAppointment: (id, data) => api.put(`/owner/appointments/${id}`, data),
   deleteAppointment: (id) => api.delete(`/owner/appointments/${id}`),
   getEarnings: (year) => api.get('/owner/earnings', { params: { year } }),
+  getBlockedSlots: (date) => api.get('/owner/blocked-slots', { params: { date } }),
+  getClinicSlots: (params) => api.get('/owner/clinic-slots', { params }),
 };
 
 // Consultants
@@ -130,7 +157,9 @@ export const billingAPI = {
   getById: (id) => api.get(`/billing/${id}`),
   create: (data) => api.post('/billing', data),
   update: (id, data) => api.put(`/billing/${id}`, data),
+  delete: (id) => api.delete(`/billing/${id}`),
   getStats: () => api.get('/billing/stats/summary'),
+  getIncomeReport: (params) => api.get('/billing/income-report', { params }),
 };
 
 export default api;
