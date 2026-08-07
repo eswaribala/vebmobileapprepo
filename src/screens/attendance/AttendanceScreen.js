@@ -544,37 +544,46 @@ export default function AttendanceScreen({ navigation }) {
                                 <Text style={styles.dayName}>{dayName}</Text>
                               </View>
 
-                              {/* Morning */}
-                              <View style={styles.daySessionCol}>
-                                {rec.morning_in ? (
-                                  <>
-                                    <Text style={styles.timeIn}>
-                                      <Ionicons name="log-in-outline" size={10} color={theme.colors.success} /> {rec.morning_in}
-                                    </Text>
-                                    <Text style={styles.timeOut}>
-                                      <Ionicons name="log-out-outline" size={10} color={theme.colors.textSecondary} /> {rec.morning_out || '—'}
-                                    </Text>
-                                  </>
-                                ) : (
+                              {rec.status === 'absent' ? (
+                                /* Full day absent — single label, not per-session */
+                                <View style={[styles.daySessionCol, { flex: 2, alignItems: 'center' }]}>
                                   <Text style={styles.absentText}>Absent</Text>
-                                )}
-                              </View>
+                                </View>
+                              ) : (
+                                <>
+                                  {/* Morning */}
+                                  <View style={styles.daySessionCol}>
+                                    {rec.morning_in ? (
+                                      <>
+                                        <Text style={styles.timeIn}>
+                                          <Ionicons name="log-in-outline" size={10} color={theme.colors.success} /> {rec.morning_in}
+                                        </Text>
+                                        <Text style={styles.timeOut}>
+                                          <Ionicons name="log-out-outline" size={10} color={theme.colors.textSecondary} /> {rec.morning_out || '—'}
+                                        </Text>
+                                      </>
+                                    ) : (
+                                      <Text style={styles.absentText}>Missed</Text>
+                                    )}
+                                  </View>
 
-                              {/* Evening */}
-                              <View style={styles.daySessionCol}>
-                                {rec.evening_in ? (
-                                  <>
-                                    <Text style={styles.timeIn}>
-                                      <Ionicons name="log-in-outline" size={10} color={theme.colors.success} /> {rec.evening_in}
-                                    </Text>
-                                    <Text style={styles.timeOut}>
-                                      <Ionicons name="log-out-outline" size={10} color={theme.colors.textSecondary} /> {rec.evening_out || '—'}
-                                    </Text>
-                                  </>
-                                ) : (
-                                  <Text style={styles.absentText}>Absent</Text>
-                                )}
-                              </View>
+                                  {/* Evening */}
+                                  <View style={styles.daySessionCol}>
+                                    {rec.evening_in ? (
+                                      <>
+                                        <Text style={styles.timeIn}>
+                                          <Ionicons name="log-in-outline" size={10} color={theme.colors.success} /> {rec.evening_in}
+                                        </Text>
+                                        <Text style={styles.timeOut}>
+                                          <Ionicons name="log-out-outline" size={10} color={theme.colors.textSecondary} /> {rec.evening_out || '—'}
+                                        </Text>
+                                      </>
+                                    ) : (
+                                      <Text style={styles.absentText}>Missed</Text>
+                                    )}
+                                  </View>
+                                </>
+                              )}
 
                               {/* Status chip */}
                               <View style={[styles.dayStatusChip, { backgroundColor: sc.bg }]}>
