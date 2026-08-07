@@ -563,7 +563,7 @@ export default function AttendanceScreen({ navigation }) {
                                         </Text>
                                       </>
                                     ) : (
-                                      <Text style={styles.absentText}>Missed</Text>
+                                      <Text style={styles.absentText}>Absent</Text>
                                     )}
                                   </View>
 
@@ -579,7 +579,7 @@ export default function AttendanceScreen({ navigation }) {
                                         </Text>
                                       </>
                                     ) : (
-                                      <Text style={styles.absentText}>Missed</Text>
+                                      <Text style={styles.absentText}>Absent</Text>
                                     )}
                                   </View>
                                 </>
