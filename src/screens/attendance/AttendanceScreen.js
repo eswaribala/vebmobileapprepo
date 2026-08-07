@@ -257,6 +257,10 @@ export default function AttendanceScreen({ navigation }) {
 
   const loadSummary = async (m = summaryMonth, y = summaryYear) => {
     try {
+      // Admin: backfill absent for every unmarked past day in the viewed month
+      if (isAdmin) {
+        try { await attendanceAPI.backfillAbsent(m, y); } catch {}
+      }
       const res = await attendanceAPI.getSummary(m, y);
       setSummary(res.data || []);
     } catch {}

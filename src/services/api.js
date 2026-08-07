@@ -105,6 +105,7 @@ export const attendanceAPI = {
   save: (data) => api.post('/attendance', data),
   update: (id, data) => api.put(`/attendance/${id}`, data),
   autoMarkAbsent: () => api.post('/attendance/auto-mark-absent'),
+  backfillAbsent: (month, year) => api.post('/attendance/backfill-absent', { month, year }),
 };
 
 // Diagnosis
