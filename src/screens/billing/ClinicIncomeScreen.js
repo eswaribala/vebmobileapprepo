@@ -92,7 +92,7 @@ export default function ClinicIncomeScreen() {
 
       {/* ── Period + Year controls ── */}
       <View style={styles.controlRow}>
-        {period !== 'yearly' ? (
+        {period === 'monthly' ? (
           <View style={styles.yearRow}>
             <TouchableOpacity onPress={() => setYear(y => y - 1)}>
               <Ionicons name="chevron-back" size={20} color={accent} />
@@ -102,8 +102,13 @@ export default function ClinicIncomeScreen() {
               <Ionicons name="chevron-forward" size={20} color={accent} />
             </TouchableOpacity>
           </View>
-        ) : (
+        ) : period === 'yearly' ? (
           <Text style={[styles.allTimeLabel, { color: accent }]}>All Years</Text>
+        ) : (
+          /* weekly — always current month, no year nav */
+          <Text style={[styles.allTimeLabel, { color: accent }]}>
+            {MONTH_NAMES[new Date().getMonth()]} {new Date().getFullYear()}
+          </Text>
         )}
         <View style={styles.periodToggle}>
           {PERIODS.map(p => (
@@ -124,8 +129,9 @@ export default function ClinicIncomeScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
           {period === 'yearly' ? 'Year-over-Year Income'
-            : period === 'weekly' ? `Weekly Income — ${MONTH_NAMES[new Date().getMonth()]} ${new Date().getFullYear()}`
-            : `Monthly Income — ${year}`}
+            : period === 'weekly'
+              ? `${MONTH_NAMES[new Date().getMonth()]} ${new Date().getFullYear()} — Weekly`
+              : `Monthly Income — ${year}`}
         </Text>
         {trend.length === 0 ? (
           <Text style={styles.empty}>
@@ -138,12 +144,12 @@ export default function ClinicIncomeScreen() {
               const pending = parseFloat(t.pending || 0);
               const total   = paid + pending;
 
-              let label = t.period_key;
+              let label = String(t.period_key);
               if (period === 'monthly') {
                 const mIdx = parseInt((t.period_key || '').slice(5), 10) - 1;
                 label = MONTH_NAMES[mIdx] || t.period_key;
               } else if (period === 'weekly') {
-                label = (t.period_key || '').slice(5);                         // "W20"
+                label = `Wk ${t.period_key}`;                                  // "Wk 1" … "Wk 4"
               }
 
               return (
