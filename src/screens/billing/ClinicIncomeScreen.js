@@ -37,20 +37,13 @@ export default function ClinicIncomeScreen() {
 
   const accent = BRANCH_COLOR[branch];
   const {
-    summary = {}, trend = [],
+    trend = [],
     current_month = {}, pending_bills = [], emi_bills = [],
   } = data || {};
 
   const maxTrend = Math.max(
     ...trend.map(t => parseFloat(t.paid || 0) + parseFloat(t.pending || 0)), 1
   );
-
-  // Label for the summary cards section
-  const summaryScope = period === 'yearly'
-    ? 'All Time'
-    : period === 'weekly'
-      ? `Year ${year}`
-      : `Year ${year}`;
 
   if (loading) {
     return (
@@ -127,33 +120,11 @@ export default function ClinicIncomeScreen() {
         </View>
       </View>
 
-      {/* ── Summary cards ── */}
-      <View style={styles.summaryHeader}>
-        <Text style={styles.summaryScope}>{summaryScope} Summary</Text>
-      </View>
-      <View style={styles.summaryRow}>
-        <View style={[styles.summaryCard, { borderTopColor: '#2E7D32' }]}>
-          <Ionicons name="cash-outline" size={22} color="#2E7D32" />
-          <Text style={[styles.summaryAmt, { color: '#2E7D32' }]}>₹{fmt(summary.total_paid)}</Text>
-          <Text style={styles.summaryLbl}>Received</Text>
-        </View>
-        <View style={[styles.summaryCard, { borderTopColor: theme.colors.warning }]}>
-          <Ionicons name="time-outline" size={22} color={theme.colors.warning} />
-          <Text style={[styles.summaryAmt, { color: theme.colors.warning }]}>₹{fmt(summary.total_pending)}</Text>
-          <Text style={styles.summaryLbl}>Pending ({summary.pending_count || 0})</Text>
-        </View>
-        <View style={[styles.summaryCard, { borderTopColor: '#7B1FA2' }]}>
-          <Ionicons name="card-outline" size={22} color="#7B1FA2" />
-          <Text style={[styles.summaryAmt, { color: '#7B1FA2' }]}>₹{fmt(summary.emi_remaining)}</Text>
-          <Text style={styles.summaryLbl}>EMI Due ({summary.emi_count || 0})</Text>
-        </View>
-      </View>
-
-      {/* ── Trend chart ── */}
+      {/* ── Trend chart — only period-relevant data ── */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
           {period === 'yearly' ? 'Year-over-Year Income'
-            : period === 'weekly' ? `Weekly Income — ${year}`
+            : period === 'weekly' ? `Weekly Income — ${MONTH_NAMES[new Date().getMonth()]} ${new Date().getFullYear()}`
             : `Monthly Income — ${year}`}
         </Text>
         {trend.length === 0 ? (
@@ -168,12 +139,10 @@ export default function ClinicIncomeScreen() {
               const total   = paid + pending;
 
               let label = t.period_key;
-              if (period === 'yearly') {
-                label = t.period_key;                                          // "2024"
-              } else if (period === 'monthly') {
+              if (period === 'monthly') {
                 const mIdx = parseInt((t.period_key || '').slice(5), 10) - 1;
                 label = MONTH_NAMES[mIdx] || t.period_key;
-              } else {
+              } else if (period === 'weekly') {
                 label = (t.period_key || '').slice(5);                         // "W20"
               }
 
@@ -212,68 +181,72 @@ export default function ClinicIncomeScreen() {
         )}
       </View>
 
-      {/* ── Pending bills ── */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Pending Bills</Text>
-          <View style={[styles.countBadge, { backgroundColor: theme.colors.warningLight }]}>
-            <Text style={[styles.countBadgeText, { color: theme.colors.warning }]}>{pending_bills.length}</Text>
-          </View>
-        </View>
-        {pending_bills.length === 0 ? (
-          <Text style={styles.empty}>No pending bills</Text>
-        ) : pending_bills.map((b, i) => (
-          <View key={b.id} style={[styles.billRow, i < pending_bills.length - 1 && styles.rowDivider]}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.billNum}>{b.bill_number}</Text>
-              <Text style={styles.billPatient}>
-                {b.first_name} {b.last_name}
-                {b.p_id ? <Text style={styles.billPid}> · {b.p_id}</Text> : null}
-              </Text>
-              <Text style={styles.billDate}>{b.bill_date}</Text>
+      {/* ── Pending bills — monthly tab only ── */}
+      {period === 'monthly' && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Pending Bills</Text>
+            <View style={[styles.countBadge, { backgroundColor: theme.colors.warningLight }]}>
+              <Text style={[styles.countBadgeText, { color: theme.colors.warning }]}>{pending_bills.length}</Text>
             </View>
-            <View style={styles.billRight}>
-              <Text style={styles.billAmt}>₹{fmt(b.total_amount)}</Text>
-              <View style={[
-                styles.statusBadge,
-                b.payment_status === 'partial' ? styles.partialBadge : styles.pendingBadge,
-              ]}>
-                <Text style={styles.statusText}>{b.payment_status}</Text>
+          </View>
+          {pending_bills.length === 0 ? (
+            <Text style={styles.empty}>No pending bills</Text>
+          ) : pending_bills.map((b, i) => (
+            <View key={b.id} style={[styles.billRow, i < pending_bills.length - 1 && styles.rowDivider]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.billNum}>{b.bill_number}</Text>
+                <Text style={styles.billPatient}>
+                  {b.first_name} {b.last_name}
+                  {b.p_id ? <Text style={styles.billPid}> · {b.p_id}</Text> : null}
+                </Text>
+                <Text style={styles.billDate}>{b.bill_date}</Text>
+              </View>
+              <View style={styles.billRight}>
+                <Text style={styles.billAmt}>₹{fmt(b.total_amount)}</Text>
+                <View style={[
+                  styles.statusBadge,
+                  b.payment_status === 'partial' ? styles.partialBadge : styles.pendingBadge,
+                ]}>
+                  <Text style={styles.statusText}>{b.payment_status}</Text>
+                </View>
               </View>
             </View>
-          </View>
-        ))}
-      </View>
-
-      {/* ── EMI receivables ── */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>EMI Receivables</Text>
-          <View style={[styles.countBadge, { backgroundColor: '#F3E5F5' }]}>
-            <Text style={[styles.countBadgeText, { color: '#7B1FA2' }]}>{emi_bills.length}</Text>
-          </View>
+          ))}
         </View>
-        {emi_bills.length === 0 ? (
-          <Text style={styles.empty}>No active EMI plans</Text>
-        ) : emi_bills.map((b, i) => (
-          <View key={b.id} style={[styles.billRow, i < emi_bills.length - 1 && styles.rowDivider]}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.billNum}>{b.bill_number}</Text>
-              <Text style={styles.billPatient}>
-                {b.first_name} {b.last_name}
-                {b.p_id ? <Text style={styles.billPid}> · {b.p_id}</Text> : null}
-              </Text>
-              <Text style={styles.billDate}>
-                {b.emi_remaining_count} of {b.emi_months} EMIs left · ₹{fmt(b.emi_amount)}/mo
-              </Text>
-            </View>
-            <View style={styles.billRight}>
-              <Text style={[styles.billAmt, { color: '#7B1FA2' }]}>₹{fmt(b.emi_remaining_amount)}</Text>
-              <Text style={styles.emiDueLabel}>total due</Text>
+      )}
+
+      {/* ── EMI receivables — monthly tab only ── */}
+      {period === 'monthly' && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>EMI Receivables</Text>
+            <View style={[styles.countBadge, { backgroundColor: '#F3E5F5' }]}>
+              <Text style={[styles.countBadgeText, { color: '#7B1FA2' }]}>{emi_bills.length}</Text>
             </View>
           </View>
-        ))}
-      </View>
+          {emi_bills.length === 0 ? (
+            <Text style={styles.empty}>No active EMI plans</Text>
+          ) : emi_bills.map((b, i) => (
+            <View key={b.id} style={[styles.billRow, i < emi_bills.length - 1 && styles.rowDivider]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.billNum}>{b.bill_number}</Text>
+                <Text style={styles.billPatient}>
+                  {b.first_name} {b.last_name}
+                  {b.p_id ? <Text style={styles.billPid}> · {b.p_id}</Text> : null}
+                </Text>
+                <Text style={styles.billDate}>
+                  {b.emi_remaining_count} of {b.emi_months} EMIs left · ₹{fmt(b.emi_amount)}/mo
+                </Text>
+              </View>
+              <View style={styles.billRight}>
+                <Text style={[styles.billAmt, { color: '#7B1FA2' }]}>₹{fmt(b.emi_remaining_amount)}</Text>
+                <Text style={styles.emiDueLabel}>total due</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={{ height: 32 }} />
     </ScrollView>
@@ -325,18 +298,6 @@ const styles = StyleSheet.create({
   },
   periodBtn:     { paddingHorizontal: 12, paddingVertical: 5, borderRadius: theme.radius.round },
   periodText:    { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
-
-  summaryHeader: { paddingHorizontal: theme.spacing.md, paddingTop: theme.spacing.md, paddingBottom: 4 },
-  summaryScope:  { fontSize: 11, fontWeight: '700', color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  summaryRow: { flexDirection: 'row', gap: theme.spacing.sm, paddingHorizontal: theme.spacing.md, paddingBottom: theme.spacing.sm },
-  summaryCard: {
-    flex: 1, backgroundColor: '#fff', borderRadius: theme.radius.md,
-    padding: theme.spacing.sm + 2, alignItems: 'center', gap: 4,
-    borderTopWidth: 3, ...theme.shadows.sm,
-  },
-  summaryAmt: { fontSize: 13, fontWeight: '800', textAlign: 'center' },
-  summaryLbl: { fontSize: 10, color: theme.colors.textSecondary, fontWeight: '600', textAlign: 'center' },
 
   section: {
     backgroundColor: '#fff', marginHorizontal: theme.spacing.md,
