@@ -161,6 +161,7 @@ export const billingAPI = {
   delete: (id) => api.delete(`/billing/${id}`),
   getStats: () => api.get('/billing/stats/summary'),
   getIncomeReport: (params) => api.get('/billing/income-report', { params }),
+  voidBill: (id) => api.patch(`/billing/${id}/void`),
 };
 
 export default api;

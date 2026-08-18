@@ -322,31 +322,58 @@ function CreateBillScreen({ route, navigation }) {
 }
 
 // ─── Bill List Screen ─────────────────────────────────────────────────────────
+const PAGE_SIZE = 5;
+
 function BillListScreen({ navigation }) {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [page, setPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(bills.length / PAGE_SIZE));
+  const pagedBills = bills.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const load = async () => {
     try {
       const params = filter === 'all' ? {} : { status: filter };
       const res = await billingAPI.getAll(params);
       setBills(res.data || []);
+      setPage(1);
     } catch (err) {}
     setLoading(false);
     setRefreshing(false);
   };
 
+  const handleDelete = (id, billNumber) => {
+    Alert.alert('Delete Bill', `Delete bill ${billNumber}? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            await billingAPI.delete(id);
+            load();
+          } catch (err) {
+            Alert.alert('Error', err.message);
+          }
+        }
+      },
+    ]);
+  };
+
   useFocusEffect(useCallback(() => { load(); }, [filter]));
 
   const STATUS_CONFIG = {
-    paid: { bg: theme.colors.successLight, text: theme.colors.success },
+    paid:    { bg: theme.colors.successLight, text: theme.colors.success },
     pending: { bg: theme.colors.warningLight, text: theme.colors.warning },
+    voided:  { bg: '#EEEEEE', text: '#9E9E9E' },
     partial: { bg: '#E3F2FD', text: theme.colors.primary },
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>;
+
+  const startIdx = bills.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const endIdx   = Math.min(page * PAGE_SIZE, bills.length);
 
   return (
     <View style={styles.container}>
@@ -359,26 +386,37 @@ function BillListScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         ))}
+        <Text style={styles.billCount}>{bills.length} bill{bills.length !== 1 ? 's' : ''}</Text>
       </View>
 
       <FlatList
-        data={bills}
+        data={pagedBills}
         keyExtractor={item => item.id.toString()}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         renderItem={({ item }) => {
           const sc = STATUS_CONFIG[item.payment_status] || STATUS_CONFIG.pending;
+          const isVoided = item.payment_status === 'voided';
           return (
-            <TouchableOpacity style={styles.billCard} onPress={() => navigation.navigate('BillDetail', { id: item.id })}>
+            <TouchableOpacity
+              style={[styles.billCard, isVoided && styles.billCardVoided]}
+              onPress={() => navigation.navigate('BillDetail', { id: item.id })}
+              onLongPress={() => !isVoided && handleDelete(item.id, item.bill_number)}>
               <View style={styles.billTop}>
-                <Text style={styles.billNo}>{item.bill_number}</Text>
+                <Text style={[styles.billNo, isVoided && styles.billNoVoided]}>{item.bill_number}</Text>
                 <View style={[styles.billStatusBadge, { backgroundColor: sc.bg }]}>
                   <Text style={[styles.billStatusText, { color: sc.text }]}>{item.payment_status}</Text>
                 </View>
               </View>
-              <Text style={styles.billPatient}>{item.first_name} {item.last_name} · {item.p_id}</Text>
+              <Text style={[styles.billPatient, isVoided && { color: theme.colors.textLight }]}>
+                {item.first_name} {item.last_name} · {item.p_id}
+              </Text>
               <View style={styles.billBottom}>
-                <Text style={styles.billDate}>{item.bill_date} · {item.payment_mode?.toUpperCase()}</Text>
-                <Text style={styles.billAmount}>₹{parseFloat(item.total_amount || 0).toLocaleString('en-IN')}</Text>
+                <Text style={[styles.billDate, isVoided && { color: theme.colors.textLight }]}>
+                  {item.bill_date} · {item.payment_mode?.toUpperCase()}
+                </Text>
+                <Text style={[styles.billAmount, isVoided && { color: theme.colors.textLight, textDecorationLine: 'line-through' }]}>
+                  ₹{parseFloat(item.total_amount || 0).toLocaleString('en-IN')}
+                </Text>
               </View>
             </TouchableOpacity>
           );
@@ -389,8 +427,33 @@ function BillListScreen({ navigation }) {
             <Text style={styles.emptyText}>No bills found</Text>
           </View>
         }
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: 8 }}
       />
+
+      {bills.length > 0 && (
+        <View style={styles.pagination}>
+          <TouchableOpacity
+            style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+            onPress={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}>
+            <Ionicons name="chevron-back" size={18} color={page === 1 ? theme.colors.border : '#7B1FA2'} />
+            <Text style={[styles.pageBtnText, page === 1 && styles.pageBtnTextDisabled]}>Prev</Text>
+          </TouchableOpacity>
+
+          <View style={styles.pageInfo}>
+            <Text style={styles.pageInfoText}>Page {page} / {totalPages}</Text>
+            <Text style={styles.pageInfoSub}>{startIdx}–{endIdx} of {bills.length}</Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.pageBtn, page === totalPages && styles.pageBtnDisabled]}
+            onPress={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}>
+            <Text style={[styles.pageBtnText, page === totalPages && styles.pageBtnTextDisabled]}>Next</Text>
+            <Ionicons name="chevron-forward" size={18} color={page === totalPages ? theme.colors.border : '#7B1FA2'} />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -458,14 +521,29 @@ const styles = StyleSheet.create({
   notesInput: { borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, padding: 10, textAlignVertical: 'top', color: theme.colors.text, minHeight: 60 },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#7B1FA2', marginHorizontal: theme.spacing.md, marginTop: theme.spacing.md, padding: 16, borderRadius: theme.radius.lg, gap: 8, ...theme.shadows.md },
   saveBtnText: { color: '#fff', fontSize: theme.fontSizes.lg, fontWeight: '700' },
-  filterBar: { flexDirection: 'row', gap: 8, padding: theme.spacing.md, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  filterBar: { flexDirection: 'row', gap: 8, padding: theme.spacing.md, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: theme.colors.border, alignItems: 'center' },
   filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#FAFAFA' },
   filterChipActive: { backgroundColor: '#7B1FA2', borderColor: '#7B1FA2' },
   filterChipText: { fontSize: theme.fontSizes.sm, color: theme.colors.textSecondary, fontWeight: '600' },
   filterChipTextActive: { color: '#fff' },
+  billCount: { marginLeft: 'auto', fontSize: 11, color: theme.colors.textSecondary, fontWeight: '600' },
+  pagination: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#fff', paddingHorizontal: theme.spacing.md, paddingVertical: 10,
+    borderTopWidth: 1, borderTopColor: theme.colors.border,
+  },
+  pageBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#7B1FA2' },
+  pageBtnDisabled: { borderColor: theme.colors.border },
+  pageBtnText: { fontSize: theme.fontSizes.sm, fontWeight: '700', color: '#7B1FA2' },
+  pageBtnTextDisabled: { color: theme.colors.border },
+  pageInfo: { alignItems: 'center' },
+  pageInfoText: { fontSize: theme.fontSizes.sm, fontWeight: '700', color: theme.colors.text },
+  pageInfoSub: { fontSize: 11, color: theme.colors.textSecondary },
   billCard: { backgroundColor: '#fff', marginHorizontal: theme.spacing.md, marginTop: theme.spacing.sm, borderRadius: theme.radius.md, padding: theme.spacing.md, ...theme.shadows.sm },
+  billCardVoided: { backgroundColor: '#FAFAFA', opacity: 0.75 },
   billTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   billNo: { fontSize: theme.fontSizes.sm, fontWeight: '700', color: theme.colors.primary },
+  billNoVoided: { color: '#9E9E9E', textDecorationLine: 'line-through' },
   billStatusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   billStatusText: { fontSize: 11, fontWeight: '600' },
   billPatient: { fontSize: theme.fontSizes.md, fontWeight: '700', color: theme.colors.text },

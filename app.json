@@ -21,7 +21,7 @@
         "backgroundColor": "#1565C0"
       },
       "package": "com.vebdental.care",
-      "versionCode": 32,
+      "versionCode": 33,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
