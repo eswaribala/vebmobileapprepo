@@ -75,29 +75,39 @@ export default function PatientRegistrationScreen({ route, navigation }) {
           emergency_contact: p.emergency_contact || '',
           clinic_branch: p.clinic_branch || 'Avadi',
         });
-        setAge(calcAge(p.dob));
+        setAge(p.dob ? calcAge(p.dob) : (p.age ? String(p.age) : ''));
       }).catch(() => Alert.alert('Error', 'Could not load patient data'));
     }
     navigation.setOptions({ title: editId ? 'Edit Patient' : 'New Patient' });
   }, [editId]);
 
-  const setField = (key, value) => {
-    setForm(prev => ({ ...prev, [key]: value }));
-    if (key === 'dob') setAge(calcAge(value));
+  const setField = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+
+  const handleDobChange = (isoDate) => {
+    setForm(prev => ({ ...prev, dob: isoDate }));
+    setAge(calcAge(isoDate));
+  };
+
+  const handleAgeChange = (val) => {
+    if (/^\d{0,3}$/.test(val)) {
+      setAge(val);
+      if (form.dob) setForm(prev => ({ ...prev, dob: '' })); // DOB unknown when age is typed manually
+    }
+  };
+
+  const clearDob = () => {
+    setForm(prev => ({ ...prev, dob: '' }));
+    setAge('');
   };
 
   const onDateChange = (event, selected) => {
     setShowDatePicker(false);
-    if (selected) {
-      const iso = selected.toISOString().split('T')[0];
-      setField('dob', iso);
-    }
+    if (selected) handleDobChange(selected.toISOString().split('T')[0]);
   };
 
   const validate = () => {
     if (!form.first_name.trim()) return 'First name is required';
     if (!form.mobile.trim() || form.mobile.length < 10) return 'Valid 10-digit mobile is required';
-    if (!form.dob) return 'Date of birth is required';
     return null;
   };
 
@@ -106,11 +116,12 @@ export default function PatientRegistrationScreen({ route, navigation }) {
     if (err) { Alert.alert('Validation Error', err); return; }
     setSaving(true);
     try {
+      const payload = { ...form, age: age ? parseInt(age, 10) : null };
       if (editId) {
-        await patientsAPI.update(editId, form);
+        await patientsAPI.update(editId, payload);
         Alert.alert('Success', 'Patient updated successfully', [{ text: 'OK', onPress: () => navigation.goBack() }]);
       } else {
-        const res = await patientsAPI.create(form);
+        const res = await patientsAPI.create(payload);
         Alert.alert('Patient Registered', `Patient ID: ${res.data.patient_id}`, [
           { text: 'View Details', onPress: () => navigation.replace('PatientDetails', { id: res.data.id }) },
         ]);
@@ -163,20 +174,39 @@ export default function PatientRegistrationScreen({ route, navigation }) {
 
         <View style={styles.row}>
           <View style={styles.halfField}>
-            <Field label="Date of Birth" required>
+            <Field label="Date of Birth">
               <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
                 <Text style={form.dob ? styles.inputText : styles.placeholder}>
-                  {form.dob || 'YYYY-MM-DD'}
+                  {form.dob || 'Optional'}
                 </Text>
-                <Ionicons name="calendar" size={18} color={theme.colors.primary} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {form.dob ? (
+                    <TouchableOpacity onPress={clearDob} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                  ) : null}
+                  <Ionicons name="calendar" size={18} color={theme.colors.primary} />
+                </View>
               </TouchableOpacity>
             </Field>
           </View>
           <View style={styles.halfField}>
-            <Field label="Age (auto)">
-              <View style={[styles.input, styles.readOnly]}>
-                <Text style={styles.ageText}>{age ? `${age} years` : '—'}</Text>
-              </View>
+            <Field label={form.dob ? 'Age (auto)' : 'Age (yrs)'}>
+              {form.dob ? (
+                <View style={[styles.input, styles.readOnly]}>
+                  <Text style={styles.ageText}>{age ? `${age} yrs` : '—'}</Text>
+                </View>
+              ) : (
+                <TextInput
+                  style={styles.input}
+                  value={age}
+                  onChangeText={handleAgeChange}
+                  placeholder="e.g. 35"
+                  placeholderTextColor={theme.colors.textLight}
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
+              )}
             </Field>
           </View>
         </View>

@@ -8,6 +8,9 @@ const INACTIVITY_LIMIT_MS = 10 * 60 * 1000; // 10 minutes
 const AuthContext = createContext(null);
 
 const TOKEN_KEY = 'veb_auth_token';
+const BIOMETRIC_EMAIL_KEY = 'veb_bio_email';
+const BIOMETRIC_PASS_KEY = 'veb_bio_pass';
+const BIOMETRIC_ENABLED_KEY = 'veb_bio_enabled';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -74,6 +77,32 @@ export function AuthProvider({ children }) {
     return res.user;
   };
 
+  const registerBiometric = async (email, password) => {
+    await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email);
+    await SecureStore.setItemAsync(BIOMETRIC_PASS_KEY, password);
+    await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, 'true');
+  };
+
+  const removeBiometric = async () => {
+    await Promise.all([
+      SecureStore.deleteItemAsync(BIOMETRIC_EMAIL_KEY).catch(() => {}),
+      SecureStore.deleteItemAsync(BIOMETRIC_PASS_KEY).catch(() => {}),
+      SecureStore.deleteItemAsync(BIOMETRIC_ENABLED_KEY).catch(() => {}),
+    ]);
+  };
+
+  const isBiometricRegistered = async () => {
+    const val = await SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY).catch(() => null);
+    return val === 'true';
+  };
+
+  const loginWithBiometric = async () => {
+    const email = await SecureStore.getItemAsync(BIOMETRIC_EMAIL_KEY);
+    const pass = await SecureStore.getItemAsync(BIOMETRIC_PASS_KEY);
+    if (!email || !pass) throw new Error('No biometric credentials stored. Please log in with your password.');
+    return await login(email, pass);
+  };
+
   const signup = async (name, email, password, role) => {
     const res = await authAPI.signup({ name, email, password, role });
     if (res.pending) return { pending: true }; // caller navigates to PendingApproval
@@ -86,7 +115,7 @@ export function AuthProvider({ children }) {
   const logout = logoutInternal;
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, registerBiometric, removeBiometric, isBiometricRegistered, loginWithBiometric }}>
       {children}
     </AuthContext.Provider>
   );

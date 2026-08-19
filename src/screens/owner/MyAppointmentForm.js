@@ -8,17 +8,34 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { theme } from '../../utils/theme';
 import { ownerConsultingAPI } from '../../services/api';
 
+function parseTimes(str) {
+  return (str || '').split(',').map(t => t.trim()).filter(Boolean);
+}
+
 const PAYMENT_MODES = ['cash', 'upi', 'bank', 'cheque'];
+
+const TIME_SLOTS = [
+  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+  '18:00', '18:30', '19:00', '19:30', '20:00', '20:30',
+  '21:00', '21:30', '22:00',
+];
 
 export default function MyAppointmentFormScreen({ route, navigation }) {
   const existing = route.params?.appointment;
   const [saving, setSaving] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [clinicConflictSlots, setClinicConflictSlots] = useState([]);
+  const [selectedTimes, setSelectedTimes] = useState(
+    existing?.appointment_time
+      ? existing.appointment_time.split(',').map(t => t.trim()).filter(Boolean)
+      : []
+  );
   const [form, setForm] = useState({
     clinic_name: '',
     clinic_address: '',
     appointment_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
-    appointment_time: '',
     patient_name: '',
     procedure: '',
     income: '',
@@ -32,7 +49,6 @@ export default function MyAppointmentFormScreen({ route, navigation }) {
         clinic_name: existing.clinic_name || '',
         clinic_address: existing.clinic_address || '',
         appointment_date: existing.appointment_date || '',
-        appointment_time: existing.appointment_time || '',
         patient_name: existing.patient_name || '',
         procedure: existing.procedure || '',
         income: String(existing.income || ''),
@@ -43,6 +59,16 @@ export default function MyAppointmentFormScreen({ route, navigation }) {
     navigation.setOptions({ title: existing?.id ? 'Edit Appointment' : 'Add Appointment' });
   }, []);
 
+  useEffect(() => {
+    if (!form.appointment_date) return;
+    ownerConsultingAPI.getClinicSlots({ date: form.appointment_date, exclude_id: existing?.id })
+      .then(res => {
+        const slots = (res.data || []).flatMap(row => parseTimes(row.appointment_time));
+        setClinicConflictSlots([...new Set(slots)]);
+      })
+      .catch(() => setClinicConflictSlots([]));
+  }, [form.appointment_date]);
+
   const sf = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const handleSave = async () => {
@@ -50,7 +76,7 @@ export default function MyAppointmentFormScreen({ route, navigation }) {
     if (!form.appointment_date) { Alert.alert('Error', 'Date is required'); return; }
     setSaving(true);
     try {
-      const data = { ...form, income: parseFloat(form.income) || 0 };
+      const data = { ...form, appointment_time: selectedTimes.join(','), income: parseFloat(form.income) || 0 };
       if (existing?.id) {
         await ownerConsultingAPI.updateAppointment(existing.id, data);
       } else {
@@ -89,12 +115,66 @@ export default function MyAppointmentFormScreen({ route, navigation }) {
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker value={new Date(form.appointment_date)} mode="date" display="default"
-            onChange={(_, d) => { setShowDatePicker(false); if (d) sf('appointment_date', d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })); }} />
+            onChange={(_, d) => {
+              setShowDatePicker(false);
+              if (d) {
+                const newDate = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                sf('appointment_date', newDate);
+                setSelectedTimes([]); // clear times when date changes
+              }
+            }} />
         )}
 
-        <Text style={styles.label}>Time</Text>
-        <TextInput style={styles.input} value={form.appointment_time} onChangeText={v => sf('appointment_time', v)}
-          placeholder="e.g. 10:30 AM" placeholderTextColor={theme.colors.textLight} />
+        <Text style={styles.label}>Time Slot(s) — tap multiple for longer procedures</Text>
+        {clinicConflictSlots.length > 0 && (
+          <View style={styles.conflictNotice}>
+            <Ionicons name="warning" size={13} color="#C62828" />
+            <Text style={styles.conflictNoticeText}>Red slots = already occupied (clinic patients or other consulting)</Text>
+          </View>
+        )}
+        {selectedTimes.length > 0 && (
+          <View style={styles.selectionSummary}>
+            <Ionicons name="time-outline" size={14} color={theme.colors.primary} />
+            <Text style={styles.selectionSummaryText}>
+              {selectedTimes.length === 1
+                ? selectedTimes[0]
+                : `${selectedTimes[0]} – ${selectedTimes[selectedTimes.length - 1]}  (${selectedTimes.length} slots · ${selectedTimes.length * 30} min)`}
+            </Text>
+            <TouchableOpacity onPress={() => setSelectedTimes([])}>
+              <Ionicons name="close-circle" size={16} color={theme.colors.error} />
+            </TouchableOpacity>
+          </View>
+        )}
+        <View style={styles.timeGrid}>
+          {TIME_SLOTS.map(slot => {
+            const isSelected = selectedTimes.includes(slot);
+            const isClinicConflict = clinicConflictSlots.includes(slot);
+            return (
+              <TouchableOpacity
+                key={slot}
+                style={[
+                  styles.timeSlot,
+                  isClinicConflict && styles.timeSlotConflict,
+                  isSelected && !isClinicConflict && styles.timeSlotActive,
+                  isSelected && isClinicConflict && styles.timeSlotConflictSelected,
+                ]}
+                onPress={() =>
+                  setSelectedTimes(prev =>
+                    prev.includes(slot)
+                      ? prev.filter(t => t !== slot)
+                      : [...prev, slot].sort()
+                  )
+                }>
+                <Text style={[
+                  styles.timeSlotText,
+                  isClinicConflict && !isSelected && styles.timeSlotTextConflict,
+                  isSelected && styles.timeSlotTextActive,
+                ]}>{slot}</Text>
+                {isClinicConflict && <Text style={styles.clinicConflictLabel}>Clinic</Text>}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         <Text style={styles.label}>Patient Name</Text>
         <TextInput style={styles.input} value={form.patient_name} onChangeText={v => sf('patient_name', v)}
@@ -150,6 +230,19 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, paddingHorizontal: 12, paddingVertical: 10, fontSize: theme.fontSizes.md, color: theme.colors.text, backgroundColor: '#FAFAFA', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   inputText: { color: theme.colors.text, flex: 1 },
   multiline: { flexDirection: undefined, minHeight: 60, textAlignVertical: 'top' },
+  selectionSummary: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E3F2FD', padding: 8, borderRadius: theme.radius.sm, marginBottom: 8, marginTop: 6 },
+  selectionSummaryText: { flex: 1, fontSize: theme.fontSizes.sm, fontWeight: '700', color: theme.colors.primary },
+  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  conflictNotice: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFEBEE', borderRadius: theme.radius.sm, padding: 8, marginBottom: 6 },
+  conflictNoticeText: { flex: 1, fontSize: 11, color: '#C62828', fontWeight: '600' },
+  timeSlot: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.radius.sm, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#FAFAFA', alignItems: 'center' },
+  timeSlotActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  timeSlotConflict: { backgroundColor: '#FFEBEE', borderColor: '#E53935' },
+  timeSlotConflictSelected: { backgroundColor: '#C62828', borderColor: '#C62828' },
+  timeSlotText:            { fontSize: theme.fontSizes.sm, color: theme.colors.text, fontWeight: '600' },
+  timeSlotTextActive:      { color: '#fff' },
+  timeSlotTextConflict:    { color: '#E53935' },
+  clinicConflictLabel:     { fontSize: 8, color: '#E53935', fontWeight: '700', marginTop: 1 },
   chips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: theme.radius.round, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: '#FAFAFA' },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },

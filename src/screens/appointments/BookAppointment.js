@@ -13,7 +13,10 @@ const CLINIC_BRANCHES = ['Avadi', 'Thiruninravur'];
 
 const TIME_SLOTS = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+  '18:00', '18:30', '19:00', '19:30', '20:00', '20:30',
+  '21:00', '21:30', '22:00',
 ];
 
 const PURPOSES = [
@@ -33,22 +36,57 @@ export default function BookAppointmentScreen({ route, navigation }) {
   const [selectedConsultant, setSelectedConsultant] = useState(null);
   const [clinicBranch, setClinicBranch] = useState('Avadi');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [time, setTime] = useState('');
+  const [times, setTimes] = useState([]);
   const [purpose, setPurpose] = useState('');
   const [notes, setNotes] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [slotCounts, setSlotCounts] = useState({});  // slot → patient count for selected doctor/date
+  const [slotRefreshKey, setSlotRefreshKey] = useState(0); // incremented after each save to re-fetch counts
+  const [ownerExtSlots, setOwnerExtSlots] = useState([]);  // owner's external clinic slots
+  const [ownerDoctorId, setOwnerDoctorId] = useState(null);
 
   useEffect(() => {
     Promise.all([patientsAPI.getAll(), doctorsAPI.getAll(), staffAPI.getAll()]).then(([pRes, dRes, sRes]) => {
       setPatients(pRes.data || []);
       setDoctors(dRes.data || []);
       setConsultants((sRes.data || []).filter(s => s.role === 'Consultant'));
-      // No auto-select — user must choose explicitly
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  // Fetch owner's external-clinic blocked slots for the selected date.
+  // Uses the appointments route (requireAuth) so all roles can read it.
+  useEffect(() => {
+    appointmentsAPI.getOwnerBlockedSlots(date)
+      .then(res => {
+        setOwnerExtSlots(res.data || []);
+        if (res.owner_doctor_id) setOwnerDoctorId(res.owner_doctor_id);
+      })
+      .catch(() => setOwnerExtSlots([]));
+  }, [date]);
+
+  // Fetch patient counts per slot for the selected doctor/consultant + date
+  useEffect(() => {
+    const providerId = providerType === 'doctor' ? selectedDoctor?.id : selectedConsultant?.id;
+    if (!providerId) { setSlotCounts({}); return; }
+    const params = { date };
+    if (providerType === 'doctor') params.doctor_id = providerId;
+    else params.consultant_id = providerId;
+    appointmentsAPI.getAll(params)
+      .then(res => {
+        const counts = {};
+        (res.data || [])
+          .filter(a => a.status !== 'cancelled')
+          .forEach(a => {
+            (a.appointment_time || '').split(',').map(t => t.trim()).filter(Boolean)
+              .forEach(slot => { counts[slot] = (counts[slot] || 0) + 1; });
+          });
+        setSlotCounts(counts);
+      })
+      .catch(() => setSlotCounts({}));
+  }, [date, selectedDoctor, selectedConsultant, providerType, slotRefreshKey]);
 
   const filteredPatients = patients.filter(p =>
     !patientSearch || `${p.first_name} ${p.last_name} ${p.mobile}`.toLowerCase().includes(patientSearch.toLowerCase())
@@ -58,7 +96,7 @@ export default function BookAppointmentScreen({ route, navigation }) {
     if (!selectedPatient) { Alert.alert('Error', 'Please select a patient'); return; }
     if (providerType === 'doctor' && !selectedDoctor) { Alert.alert('Error', 'Please select a doctor'); return; }
     if (providerType === 'consultant' && !selectedConsultant) { Alert.alert('Error', 'Please select a consultant'); return; }
-    if (!time) { Alert.alert('Error', 'Please select an appointment time'); return; }
+    if (!times.length) { Alert.alert('Error', 'Please select at least one appointment time'); return; }
     if (!purpose) { Alert.alert('Error', 'Please select appointment purpose'); return; }
     setSaving(true);
     try {
@@ -67,11 +105,17 @@ export default function BookAppointmentScreen({ route, navigation }) {
         doctor_id: providerType === 'doctor' ? selectedDoctor?.id : null,
         consultant_id: providerType === 'consultant' ? selectedConsultant?.id : null,
         appointment_date: date,
-        appointment_time: time,
+        appointment_time: times.join(','),
         purpose,
         notes,
         clinic_branch: clinicBranch,
       });
+
+      // Clear selected slots before refreshing counts — otherwise the just-booked
+      // slots stay "selected" and the badge adds +1 on top of the now-updated count.
+      const bookedTimes = times;
+      setTimes([]);
+      setSlotRefreshKey(k => k + 1);
 
       const provider = providerType === 'doctor' ? selectedDoctor : selectedConsultant;
       const providerName = provider?.name || '';
@@ -79,9 +123,13 @@ export default function BookAppointmentScreen({ route, navigation }) {
       const dateStr = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
       const clinic = `VEB DENTAL CARE, ${clinicBranch}`;
 
+      const timeDisplay = bookedTimes.length === 1
+        ? bookedTimes[0]
+        : `${bookedTimes[0]} – ${bookedTimes[bookedTimes.length - 1]} (${bookedTimes.length} slots)`;
+
       const patientMsg = encodeURIComponent(
         `Dear ${selectedPatient.first_name},\n\nYour appointment is confirmed at ${clinic}.\n\n` +
-        `📅 Date: ${dateStr}\n⏰ Time: ${time}\n` +
+        `📅 Date: ${dateStr}\n⏰ Time: ${timeDisplay}\n` +
         (providerName ? `👨‍⚕️ Provider: Dr. ${providerName}\n` : '') +
         `🦷 Purpose: ${purpose}\n\nPlease arrive 10 minutes early.\n\nVEB DENTAL CARE`
       );
@@ -89,7 +137,7 @@ export default function BookAppointmentScreen({ route, navigation }) {
       const providerMsg = providerMobile ? encodeURIComponent(
         `Dear Dr. ${providerName},\n\nA new appointment has been scheduled for you at ${clinic}.\n\n` +
         `👤 Patient: ${selectedPatient.first_name} ${selectedPatient.last_name}\n` +
-        `🦷 Purpose: ${purpose}\n📅 Date: ${dateStr}\n⏰ Time: ${time}\n\n` +
+        `🦷 Purpose: ${purpose}\n📅 Date: ${dateStr}\n⏰ Time: ${timeDisplay}\n\n` +
         `Please be prepared.\n\nVEB DENTAL CARE Management`
       ) : null;
 
@@ -121,6 +169,10 @@ export default function BookAppointmentScreen({ route, navigation }) {
     }
     setSaving(false);
   };
+
+  // True when the selected doctor is Dr. Vignesh (the owner)
+  // Works once backend adds owner_doctor_id to the /owner/blocked-slots response
+  const isOwnerSelected = providerType === 'doctor' && !!ownerDoctorId && selectedDoctor?.id === ownerDoctorId;
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>;
 
@@ -240,14 +292,67 @@ export default function BookAppointmentScreen({ route, navigation }) {
           />
         )}
 
-        <Text style={styles.subLabel}>Select Time Slot</Text>
-        <View style={styles.timeGrid}>
-          {TIME_SLOTS.map(slot => (
-            <TouchableOpacity key={slot} style={[styles.timeSlot, time === slot && styles.timeSlotActive]}
-              onPress={() => setTime(slot)}>
-              <Text style={[styles.timeSlotText, time === slot && styles.timeSlotTextActive]}>{slot}</Text>
+        <Text style={styles.subLabel}>Select Time Slot(s)  — tap multiple for longer procedures</Text>
+        {isOwnerSelected && ownerExtSlots.length > 0 && (
+          <View style={styles.ownerBlockedNotice}>
+            <Ionicons name="warning" size={13} color="#C62828" />
+            <Text style={styles.ownerBlockedNoticeText}>Red slots = Owner already occupied</Text>
+          </View>
+        )}
+        {times.length > 0 && (
+          <View style={styles.selectionSummary}>
+            <Ionicons name="time-outline" size={14} color={theme.colors.primary} />
+            <Text style={styles.selectionSummaryText}>
+              {times.length === 1
+                ? times[0]
+                : `${times[0]} – ${times[times.length - 1]}  (${times.length} slots · ${times.length * 30} min)`}
+            </Text>
+            <TouchableOpacity onPress={() => setTimes([])}>
+              <Ionicons name="close-circle" size={16} color={theme.colors.error} />
             </TouchableOpacity>
-          ))}
+          </View>
+        )}
+        <View style={styles.timeGrid}>
+          {TIME_SLOTS.map(slot => {
+            const isExtBlocked = isOwnerSelected && ownerExtSlots.includes(slot);
+            const isSelected = times.includes(slot);
+            const patientCount = slotCounts[slot] || 0;
+            const isOccupied = patientCount > 0;
+            return (
+              <TouchableOpacity
+                key={slot}
+                style={[
+                  styles.timeSlot,
+                  isExtBlocked                       && styles.timeSlotBlocked,
+                  !isExtBlocked && isOccupied  && !isSelected && styles.timeSlotOccupied,
+                  isSelected && !isOccupied          && styles.timeSlotActive,
+                  isSelected && isOccupied           && styles.timeSlotBusy,
+                ]}
+                onPress={() => {
+                  if (isExtBlocked) return;
+                  setTimes(prev =>
+                    prev.includes(slot)
+                      ? prev.filter(t => t !== slot)
+                      : [...prev, slot].sort()
+                  );
+                }}
+                disabled={isExtBlocked}>
+                <Text style={[
+                  styles.timeSlotText,
+                  isExtBlocked                       && styles.timeSlotTextBlocked,
+                  !isExtBlocked && isOccupied  && !isSelected && styles.timeSlotTextOccupied,
+                  isSelected && !isOccupied          && styles.timeSlotTextActive,
+                  isSelected && isOccupied           && styles.timeSlotTextBusy,
+                ]}>{slot}</Text>
+                {isOccupied && !isExtBlocked && (
+                  <View style={[styles.countBadge, isSelected && styles.countBadgeBusy]}>
+                    <Text style={styles.countBadgeText}>{isSelected ? patientCount + 1 : patientCount}</Text>
+                  </View>
+                )}
+                {isExtBlocked && <Text style={styles.blockedLabel}>Occupied</Text>}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -306,11 +411,25 @@ const styles = StyleSheet.create({
   dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#E3F2FD', padding: 12, borderRadius: theme.radius.md, marginBottom: 12 },
   dateBtnText: { fontSize: theme.fontSizes.md, color: theme.colors.primary, fontWeight: '600', flex: 1 },
   subLabel: { fontSize: theme.fontSizes.sm, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 8 },
+  selectionSummary: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E3F2FD', padding: 8, borderRadius: theme.radius.sm, marginBottom: 10 },
+  selectionSummaryText: { flex: 1, fontSize: theme.fontSizes.sm, fontWeight: '700', color: theme.colors.primary },
+  ownerBlockedNotice: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFEBEE', borderRadius: 6, padding: 7, marginBottom: 8 },
+  ownerBlockedNoticeText: { flex: 1, fontSize: 11, color: '#C62828', fontWeight: '600' },
   timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  timeSlot: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.radius.sm, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#FAFAFA' },
-  timeSlotActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  timeSlotText: { fontSize: theme.fontSizes.sm, color: theme.colors.text, fontWeight: '600' },
-  timeSlotTextActive: { color: '#fff' },
+  timeSlot: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: theme.radius.sm, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#FAFAFA', alignItems: 'center' },
+  timeSlotActive:   { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  timeSlotOccupied: { backgroundColor: '#FFF3E0', borderColor: '#FB8C00' },
+  timeSlotBusy:     { backgroundColor: '#FFEBEE', borderColor: '#E53935' },
+  timeSlotBlocked:  { backgroundColor: '#FFEBEE', borderColor: '#E53935' },
+  timeSlotText:         { fontSize: theme.fontSizes.sm, color: theme.colors.text, fontWeight: '600' },
+  timeSlotTextActive:   { color: '#fff' },
+  timeSlotTextOccupied: { color: '#E65100' },
+  timeSlotTextBusy:     { color: '#C62828' },
+  timeSlotTextBlocked:  { color: '#E53935' },
+  blockedLabel: { fontSize: 9, color: '#E53935', fontWeight: '700', marginTop: 1 },
+  countBadge:     { position: 'absolute', top: -5, right: -5, backgroundColor: '#FB8C00', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3, borderWidth: 1.5, borderColor: '#fff' },
+  countBadgeBusy: { backgroundColor: '#E53935' },
+  countBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
   purposeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   purposeChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.radius.round, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#FAFAFA' },
   purposeChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },

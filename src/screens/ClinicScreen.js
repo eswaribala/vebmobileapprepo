@@ -57,6 +57,12 @@ export default function ClinicScreen({ navigation }) {
         <ClinicOption icon="bar-chart" title="Monthly Report" subtitle="View attendance summaries"
           color="#7B1FA2" onPress={() => navigation.navigate('Attendance', { tab: 'summary' })} />
       </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Data Import</Text>
+        <ClinicOption icon="cloud-upload" title="Import from Excel" subtitle="Upload old patient records and bill details"
+          color="#00897B" onPress={() => navigation.navigate('ImportData')} />
+      </View>
     </ScrollView>
   );
 }

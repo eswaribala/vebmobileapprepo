@@ -10,11 +10,15 @@ import { ownerConsultingAPI } from '../../services/api';
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-function ApptCard({ appt, onEdit, onDelete }) {
+function parseTimes(str) {
+  return (str || '').split(',').map(t => t.trim()).filter(Boolean);
+}
+
+function ApptCard({ appt, onEdit, onDelete, hasConflict }) {
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, hasConflict && styles.cardConflict]}>
       <View style={styles.cardTop}>
-        <View style={styles.dateBox}>
+        <View style={[styles.dateBox, hasConflict && styles.dateBoxConflict]}>
           <Text style={styles.dateDay}>{appt.appointment_date?.slice(8)}</Text>
           <Text style={styles.dateMon}>{MONTH_NAMES[parseInt(appt.appointment_date?.slice(5, 7)) - 1]}</Text>
         </View>
@@ -49,6 +53,7 @@ function ApptCard({ appt, onEdit, onDelete }) {
 
 export default function MyConsultingScreen({ navigation }) {
   const [appointments, setAppointments] = useState([]);
+  const [clinicByDate, setClinicByDate] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const now = new Date();
@@ -59,7 +64,19 @@ export default function MyConsultingScreen({ navigation }) {
     try {
       const res = await ownerConsultingAPI.getAppointments({ month: selMonth + 1, year: selYear });
       setAppointments(res.data || []);
-    } catch {}
+    } catch { setAppointments([]); }
+
+    try {
+      const clinicRes = await ownerConsultingAPI.getClinicSlots({ month: selMonth + 1, year: selYear });
+      const map = {};
+      for (const row of (clinicRes.data || [])) {
+        if (!row.appointment_date || !row.appointment_time) continue;
+        const times = parseTimes(row.appointment_time);
+        map[row.appointment_date] = [...(map[row.appointment_date] || []), ...times];
+      }
+      setClinicByDate(map);
+    } catch { setClinicByDate({}); }
+
     setLoading(false);
     setRefreshing(false);
   };
@@ -108,6 +125,9 @@ export default function MyConsultingScreen({ navigation }) {
             appt={item}
             onEdit={() => navigation.navigate('MyAppointmentForm', { appointment: item })}
             onDelete={() => handleDelete(item)}
+            hasConflict={(clinicByDate[item.appointment_date] || []).some(
+              t => parseTimes(item.appointment_time).includes(t)
+            )}
           />
         )}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
@@ -147,8 +167,12 @@ const styles = StyleSheet.create({
   summaryCount: { fontSize: 13, color: theme.colors.textSecondary, fontWeight: '600' },
   summaryIncome: { fontSize: 16, fontWeight: '800', color: '#2E7D32' },
   card: { backgroundColor: '#fff', margin: theme.spacing.md, marginBottom: 0, borderRadius: theme.radius.md, padding: theme.spacing.md, ...theme.shadows.sm },
+  cardConflict: { borderWidth: 1.5, borderColor: '#E53935' },
+  conflictBanner: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFEBEE', borderRadius: 6, padding: 6, marginBottom: 8 },
+  conflictText: { flex: 1, fontSize: 11, color: '#C62828', fontWeight: '600' },
   cardTop: { flexDirection: 'row' },
   dateBox: { width: 42, alignItems: 'center', backgroundColor: theme.colors.primary, borderRadius: 10, paddingVertical: 6, marginRight: 12 },
+  dateBoxConflict: { backgroundColor: '#E53935' },
   dateDay: { fontSize: 18, fontWeight: '800', color: '#fff' },
   dateMon: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
   info: { flex: 1 },

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, StackActions } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useAuth, isFullAccess } from '../context/AuthContext';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import PendingApprovalScreen from '../screens/auth/PendingApprovalScreen';
+import ChangePasswordScreen from '../screens/auth/ChangePasswordScreen';
 import SignupRequestsScreen from '../screens/owner/SignupRequestsScreen';
 import MyConsultingScreen from '../screens/owner/MyConsultingScreen';
 import MyAppointmentFormScreen from '../screens/owner/MyAppointmentForm';
@@ -36,14 +37,55 @@ import ConsultantPaymentFormScreen from '../screens/consultants/ConsultantPaymen
 import ManagerListScreen from '../screens/managers/ManagerList';
 import ManagerFormScreen from '../screens/managers/ManagerForm';
 import AttendanceScreen from '../screens/attendance/AttendanceScreen';
+import ImportDataScreen from '../screens/import/ImportDataScreen';
 import DiagnosisScreen from '../screens/diagnosis/DiagnosisScreen';
 import TreatmentPlanScreen from '../screens/diagnosis/TreatmentPlan';
 import PrescriptionScreen from '../screens/diagnosis/Prescription';
 import BillingScreen from '../screens/billing/BillingScreen';
 import BillDetailScreen from '../screens/billing/BillDetail';
+import ClinicIncomeScreen from '../screens/billing/ClinicIncomeScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
+
+// Maps each tab name to the first screen inside its stack.
+// When the tab button is pressed, we always reset to that screen so
+// quick-action navigation never leaves a stale screen on the stack.
+const TAB_INITIAL_SCREEN = {
+  Patients:     'PatientList',
+  Appointments: 'AppointmentList',
+  Clinic:       'Clinic',
+  Bills:        'BillingList',
+  Consulting:   'MyConsulting',
+};
+
+function resetTabListener({ navigation, route }) {
+  if (!TAB_INITIAL_SCREEN[route.name]) return {}; // Dashboard / Income — nothing to reset
+  return {
+    tabPress: (e) => {
+      e.preventDefault(); // block default "restore last screen in stack" behaviour
+
+      try {
+        // Find the nested stack navigator's key inside this tab's saved state.
+        // React Navigation keeps route states in memory even when unmountOnBlur
+        // removes the component, so this works whether the tab is visible or not.
+        const tabState  = navigation.getState();
+        const tabRoute  = tabState?.routes?.find(r => r.name === route.name);
+        const stackKey  = tabRoute?.state?.key;
+
+        if (stackKey && (tabRoute.state.index ?? 0) > 0) {
+          // Screens above the initial one exist — pop them all so the
+          // stack navigator's in-memory state resets to the root screen.
+          navigation.dispatch({ ...StackActions.popToTop(), target: stackKey });
+        }
+      } catch (_) {}
+
+      // Switch to (or stay on) this tab. Because the stack state was already
+      // reset above, the tab will open at its root screen.
+      navigation.navigate(route.name);
+    },
+  };
+}
 
 const screenOptions = {
   headerStyle: { backgroundColor: theme.colors.primary },
@@ -105,6 +147,8 @@ function ClinicStack() {
       <Stack.Screen name="ManagerForm" component={ManagerFormScreen} options={{ title: 'Manager Details' }} />
       <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <Stack.Screen name="SignupRequests" component={SignupRequestsScreen} options={{ title: 'Signup Requests' }} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ title: 'Change Password' }} />
+      <Stack.Screen name="ImportData" component={ImportDataScreen} options={{ title: 'Import from Excel' }} />
     </Stack.Navigator>
   );
 }
@@ -114,6 +158,14 @@ function BillingStack() {
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen name="BillingList" component={BillingScreen} options={{ title: 'Billing' }} />
       <Stack.Screen name="BillDetail" component={BillDetailScreen} options={{ title: 'Bill Details' }} />
+    </Stack.Navigator>
+  );
+}
+
+function IncomeStack() {
+  return (
+    <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Screen name="ClinicIncome" component={ClinicIncomeScreen} options={{ title: 'Clinic Income' }} />
     </Stack.Navigator>
   );
 }
@@ -139,6 +191,7 @@ const tabBarStyle = {
   height: 60,
 };
 
+// Doctor — no Income tab
 function FullAccessTabs() {
   return (
     <Tab.Navigator
@@ -158,16 +211,51 @@ function FullAccessTabs() {
         tabBarStyle,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         headerShown: false,
+        unmountOnBlur: true,
       })}>
       <Tab.Screen name="Dashboard" component={DashboardScreen}
         options={{
           headerShown: true, ...screenOptions, title: 'VEB DENTAL CARE',
           headerRight: () => <LogoutButton />,
         }} />
-      <Tab.Screen name="Patients" component={PatientStack} />
-      <Tab.Screen name="Appointments" component={AppointmentStack} />
-      <Tab.Screen name="Clinic" component={ClinicStack} />
-      <Tab.Screen name="Bills" component={BillingStack} />
+      <Tab.Screen name="Patients"     component={PatientStack}     listeners={resetTabListener} />
+      <Tab.Screen name="Appointments" component={AppointmentStack} listeners={resetTabListener} />
+      <Tab.Screen name="Clinic"       component={ClinicStack}      listeners={resetTabListener} />
+      <Tab.Screen name="Bills"        component={BillingStack}     listeners={resetTabListener} />
+    </Tab.Navigator>
+  );
+}
+
+// Manager — same as FullAccess + Income tab
+function ManagerTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          const icons = {
+            Dashboard: focused ? 'home' : 'home-outline',
+            Patients: focused ? 'people' : 'people-outline',
+            Appointments: focused ? 'calendar' : 'calendar-outline',
+            Clinic: focused ? 'medical' : 'medical-outline',
+            Bills: focused ? 'receipt' : 'receipt-outline',
+            Income: focused ? 'trending-up' : 'trending-up-outline',
+          };
+          return <Ionicons name={icons[route.name]} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textLight,
+        tabBarStyle,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        headerShown: false,
+        unmountOnBlur: true,
+      })}>
+      <Tab.Screen name="Dashboard" component={DashboardScreen}
+        options={{ headerShown: true, ...screenOptions, title: 'VEB DENTAL CARE', headerRight: () => <LogoutButton /> }} />
+      <Tab.Screen name="Patients"     component={PatientStack}     listeners={resetTabListener} />
+      <Tab.Screen name="Appointments" component={AppointmentStack} listeners={resetTabListener} />
+      <Tab.Screen name="Clinic"       component={ClinicStack}      listeners={resetTabListener} />
+      <Tab.Screen name="Bills"        component={BillingStack}     listeners={resetTabListener} />
+      <Tab.Screen name="Income"       component={IncomeStack} />
     </Tab.Navigator>
   );
 }
@@ -178,6 +266,7 @@ function LimitedAccessTabs() {
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           const icons = {
+            Dashboard: focused ? 'home' : 'home-outline',
             Patients: focused ? 'people' : 'people-outline',
             Appointments: focused ? 'calendar' : 'calendar-outline',
             Attendance: focused ? 'time' : 'time-outline',
@@ -189,12 +278,15 @@ function LimitedAccessTabs() {
         tabBarStyle,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         headerShown: false,
+        unmountOnBlur: true,
       })}>
-      <Tab.Screen name="Patients" component={PatientStack}
+      <Tab.Screen name="Dashboard" component={DashboardScreen}
         options={{
-          // Inject logout into patient list header via screenOptions override
+          headerShown: true, ...screenOptions, title: 'VEB DENTAL CARE',
+          headerRight: () => <LogoutButton />,
         }} />
-      <Tab.Screen name="Appointments" component={AppointmentStack} />
+      <Tab.Screen name="Patients"     component={PatientStack}     listeners={resetTabListener} />
+      <Tab.Screen name="Appointments" component={AppointmentStack} listeners={resetTabListener} />
       <Tab.Screen name="Attendance" component={AttendanceStack}
         options={{
           headerShown: true, ...screenOptions, title: 'Attendance',
@@ -216,35 +308,38 @@ function MyConsultingStack() {
   );
 }
 
-// Owner tabs = Full tabs + My Consulting
+// Owner tabs = Full tabs + Income + My Consulting
 function OwnerTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           const icons = {
-            Dashboard: focused ? 'home' : 'home-outline',
-            Patients: focused ? 'people' : 'people-outline',
-            Appointments: focused ? 'calendar' : 'calendar-outline',
-            Clinic: focused ? 'medical' : 'medical-outline',
-            Bills: focused ? 'receipt' : 'receipt-outline',
-            Consulting: focused ? 'briefcase' : 'briefcase-outline',
+            Dashboard:  focused ? 'home'        : 'home-outline',
+            Patients:   focused ? 'people'      : 'people-outline',
+            Appointments: focused ? 'calendar'  : 'calendar-outline',
+            Clinic:     focused ? 'medical'     : 'medical-outline',
+            Bills:      focused ? 'receipt'     : 'receipt-outline',
+            Income:     focused ? 'trending-up' : 'trending-up-outline',
+            Consulting: focused ? 'briefcase'   : 'briefcase-outline',
           };
           return <Ionicons name={icons[route.name]} size={size} color={color} />;
         },
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textLight,
         tabBarStyle,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
         headerShown: false,
+        unmountOnBlur: true,
       })}>
       <Tab.Screen name="Dashboard" component={DashboardScreen}
         options={{ headerShown: true, ...screenOptions, title: 'VEB DENTAL CARE', headerRight: () => <LogoutButton /> }} />
-      <Tab.Screen name="Patients" component={PatientStack} />
-      <Tab.Screen name="Appointments" component={AppointmentStack} />
-      <Tab.Screen name="Clinic" component={ClinicStack} />
-      <Tab.Screen name="Bills" component={BillingStack} />
-      <Tab.Screen name="Consulting" component={MyConsultingStack} />
+      <Tab.Screen name="Patients"     component={PatientStack}      listeners={resetTabListener} />
+      <Tab.Screen name="Appointments" component={AppointmentStack}  listeners={resetTabListener} />
+      <Tab.Screen name="Clinic"       component={ClinicStack}       listeners={resetTabListener} />
+      <Tab.Screen name="Bills"        component={BillingStack}      listeners={resetTabListener} />
+      <Tab.Screen name="Income"       component={IncomeStack} />
+      <Tab.Screen name="Consulting"   component={MyConsultingStack} listeners={resetTabListener} />
     </Tab.Navigator>
   );
 }
@@ -280,9 +375,11 @@ export default function AppNavigator() {
         ? <AuthStack />
         : user.role === 'owner'
           ? <OwnerTabs />
-          : isFullAccess(user.role)
-            ? <FullAccessTabs />
-            : <LimitedAccessTabs />}
+          : user.role === 'manager'
+            ? <ManagerTabs />
+            : isFullAccess(user.role)
+              ? <FullAccessTabs />
+              : <LimitedAccessTabs />}
     </NavigationContainer>
   );
 }

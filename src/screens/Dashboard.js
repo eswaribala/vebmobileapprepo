@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { theme } from '../utils/theme';
 import { patientsAPI, appointmentsAPI, billingAPI, consultantAPI } from '../services/api';
+import { useAuth, isFullAccess } from '../context/AuthContext';
 
 function StatCard({ icon, label, value, color, bg }) {
   return (
@@ -17,6 +18,32 @@ function StatCard({ icon, label, value, color, bg }) {
       <View style={styles.statContent}>
         <Text style={styles.statValue}>{value}</Text>
         <Text style={styles.statLabel}>{label}</Text>
+      </View>
+    </View>
+  );
+}
+
+function RevenueCard({ icon, title, byBranch, color, bg }) {
+  const total = (byBranch.Avadi || 0) + (byBranch.Thiruninravur || 0);
+  return (
+    <View style={styles.revenueCard}>
+      <View style={styles.revenueCardHeader}>
+        <View style={[styles.reportIconWrap, { backgroundColor: bg }]}>
+          <Ionicons name={icon} size={16} color={color} />
+        </View>
+        <Text style={styles.sectionTitle2}>{title}</Text>
+        <Text style={[styles.revenueTotal, { color }]}>₹{total.toLocaleString('en-IN')}</Text>
+      </View>
+      <View style={styles.revenueBranchRow}>
+        {[
+          { label: 'Avadi', value: byBranch.Avadi || 0 },
+          { label: 'Thiruninravur', value: byBranch.Thiruninravur || 0 },
+        ].map(b => (
+          <View key={b.label} style={styles.revenueBranchItem}>
+            <Text style={styles.revenueBranchLabel}>{b.label}</Text>
+            <Text style={[styles.revenueBranchValue, { color }]}>₹{b.value.toLocaleString('en-IN')}</Text>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -47,7 +74,13 @@ function AppointmentItem({ item, onPress }) {
 }
 
 export default function DashboardScreen({ navigation }) {
-  const [stats, setStats] = useState({ patients: 0, today: 0, revenue: 0, pending: 0 });
+  const { user } = useAuth();
+  const hasFullAccess = isFullAccess(user?.role);
+  const [stats, setStats] = useState({
+    patients: 0, today: 0, revenue: 0, pending: 0,
+    revenueByBranch: { Avadi: 0, Thiruninravur: 0 },
+    monthRevenueByBranch: { Avadi: 0, Thiruninravur: 0 },
+  });
   const [todayAppts, setTodayAppts] = useState([]);
   const [branchFilter, setBranchFilter] = useState('All');
   const [reminders, setReminders] = useState([]);
@@ -69,6 +102,8 @@ export default function DashboardScreen({ navigation }) {
         today: aRes.data?.length || 0,
         revenue: bRes.data?.today_revenue || 0,
         pending: bRes.data?.pending_count || 0,
+        revenueByBranch: bRes.data?.today_revenue_by_branch || { Avadi: 0, Thiruninravur: 0 },
+        monthRevenueByBranch: bRes.data?.month_revenue_by_branch || { Avadi: 0, Thiruninravur: 0 },
       });
       setTodayAppts(aRes.data || []);
       setReminders(rRes.data || []);
@@ -136,7 +171,14 @@ export default function DashboardScreen({ navigation }) {
             {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </Text>
         </View>
-        <View style={styles.bannerIcon}>
+        <View style={styles.bannerRight}>
+          {user?.role === 'owner' && (
+            <TouchableOpacity
+              style={styles.keyBtn}
+              onPress={() => navigation.navigate('Clinic', { screen: 'ChangePassword' })}>
+              <Ionicons name="key" size={20} color="rgba(255,255,255,0.9)" />
+            </TouchableOpacity>
+          )}
           <Ionicons name="medical" size={48} color="rgba(255,255,255,0.3)" />
         </View>
       </View>
@@ -171,6 +213,14 @@ export default function DashboardScreen({ navigation }) {
         );
       })()}
 
+      {/* Clinic-wise Revenue */}
+      <View style={styles.revenueSection}>
+        <RevenueCard icon="cash" title="Today's Revenue" byBranch={stats.revenueByBranch}
+          color={theme.colors.success} bg="#E8F5E9" />
+        <RevenueCard icon="trending-up" title="Monthly Income" byBranch={stats.monthRevenueByBranch}
+          color="#0277BD" bg="#E3F2FD" />
+      </View>
+
       {/* Quick Actions */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       <View style={styles.quickActions}>
@@ -178,7 +228,7 @@ export default function DashboardScreen({ navigation }) {
           { icon: 'person-add', label: 'New Patient', color: theme.colors.primary, screen: 'Patients', params: { screen: 'PatientRegistration' } },
           { icon: 'calendar-outline', label: 'Book Appt', color: theme.colors.secondary, screen: 'Appointments', params: { screen: 'BookAppointment' } },
           { icon: 'medical', label: 'Diagnosis', color: theme.colors.accent, screen: 'Patients', params: { screen: 'PatientList' } },
-          { icon: 'receipt', label: 'Billing', color: '#7B1FA2', screen: 'Bills', params: { screen: 'BillingList' } },
+          ...(hasFullAccess ? [{ icon: 'receipt', label: 'Billing', color: '#7B1FA2', screen: 'Bills', params: { screen: 'BillingList' } }] : []),
         ].map((action, i) => (
           <TouchableOpacity key={i} style={styles.quickAction}
             onPress={() => navigation.navigate(action.screen, action.params)}>
@@ -327,6 +377,7 @@ export default function DashboardScreen({ navigation }) {
       })()}
 
       {/* Consultant Payment Report */}
+      {hasFullAccess && (
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View style={styles.reportTitleRow}>
@@ -375,6 +426,7 @@ export default function DashboardScreen({ navigation }) {
           ))
         )}
       </View>
+      )}
 
       {/* Clinic Info */}
       <View style={styles.clinicInfo}>
@@ -397,11 +449,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  bannerLeft: {},
+  bannerLeft: { flex: 1 },
   bannerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
   bannerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
   bannerDate: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
-  bannerIcon: { opacity: 0.5 },
+  bannerRight: { alignItems: 'flex-end', gap: 8 },
+  keyBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center', alignItems: 'center',
+  },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -500,6 +557,14 @@ const styles = StyleSheet.create({
   branchCardCount: { fontSize: 13, fontWeight: '800' },
   branchFilterTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   branchFilterTagText: { fontSize: 11, color: theme.colors.primary, fontWeight: '600' },
+  revenueSection: { marginHorizontal: theme.spacing.md, gap: theme.spacing.sm },
+  revenueCard: { backgroundColor: '#fff', borderRadius: theme.radius.lg, padding: theme.spacing.md, ...theme.shadows.sm },
+  revenueCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  revenueTotal: { marginLeft: 'auto', fontSize: 16, fontWeight: 'bold' },
+  revenueBranchRow: { flexDirection: 'row', marginTop: 10, borderTopWidth: 1, borderTopColor: theme.colors.divider, paddingTop: 10, gap: 10 },
+  revenueBranchItem: { flex: 1, backgroundColor: '#F8F9FA', borderRadius: theme.radius.md, paddingVertical: 8, paddingHorizontal: 10 },
+  revenueBranchLabel: { fontSize: 11, color: theme.colors.textSecondary, fontWeight: '600' },
+  revenueBranchValue: { fontSize: 15, fontWeight: '700', marginTop: 2 },
   reminderSubtitle: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 1 },
   reminderRow: {
     flexDirection: 'row', alignItems: 'center',

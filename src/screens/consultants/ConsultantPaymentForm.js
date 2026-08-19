@@ -22,8 +22,14 @@ export default function ConsultantPaymentFormScreen({ route, navigation }) {
   const [selectedAppt, setSelectedAppt] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [patientSearch, setPatientSearch] = useState('');
 
   const upcomingAppts = appointments.filter(a => a.status !== 'cancelled');
+  const searchQuery = patientSearch.trim().toLowerCase();
+  const filteredAppts = searchQuery
+    ? upcomingAppts.filter(a =>
+        `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase().includes(searchQuery))
+    : upcomingAppts;
 
   const handleSave = async () => {
     if (!amount || isNaN(parseFloat(amount))) {
@@ -88,13 +94,25 @@ export default function ConsultantPaymentFormScreen({ route, navigation }) {
 
         {upcomingAppts.length > 0 && (
           <>
-            <Text style={styles.label}>Link to Appointment (Optional)</Text>
+            <Text style={styles.label}>Link to Patient (Optional)</Text>
+            <View style={styles.searchBox}>
+              <Ionicons name="search" size={16} color={theme.colors.textLight} />
+              <TextInput
+                style={styles.searchInput} value={patientSearch} onChangeText={setPatientSearch}
+                placeholder="Search patient by name..."
+                placeholderTextColor={theme.colors.textLight} />
+              {patientSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setPatientSearch('')}>
+                  <Ionicons name="close-circle" size={16} color={theme.colors.textLight} />
+                </TouchableOpacity>
+              )}
+            </View>
             <TouchableOpacity
               style={[styles.apptOption, !selectedAppt && styles.apptOptionActive]}
               onPress={() => setSelectedAppt(null)}>
               <Text style={[styles.apptOptionText, !selectedAppt && styles.apptOptionTextActive]}>None</Text>
             </TouchableOpacity>
-            {upcomingAppts.slice(0, 8).map(a => (
+            {filteredAppts.map(a => (
               <TouchableOpacity key={a.id}
                 style={[styles.apptOption, selectedAppt?.id === a.id && styles.apptOptionActive]}
                 onPress={() => setSelectedAppt(a)}>
@@ -103,6 +121,9 @@ export default function ConsultantPaymentFormScreen({ route, navigation }) {
                 </Text>
               </TouchableOpacity>
             ))}
+            {filteredAppts.length === 0 && (
+              <Text style={styles.noResults}>No patients match "{patientSearch}"</Text>
+            )}
           </>
         )}
 
@@ -143,10 +164,13 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: ACCENT, borderColor: ACCENT },
   chipText: { fontSize: 13, color: theme.colors.text },
   chipTextActive: { color: '#fff' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#FAFAFA', marginBottom: 10 },
+  searchInput: { flex: 1, fontSize: theme.fontSizes.md, color: theme.colors.text, padding: 0 },
   apptOption: { padding: 10, borderRadius: theme.radius.sm, borderWidth: 1, borderColor: theme.colors.border, marginBottom: 6, backgroundColor: '#FAFAFA' },
   apptOptionActive: { backgroundColor: ACCENT, borderColor: ACCENT },
   apptOptionText: { fontSize: 13, color: theme.colors.text },
   apptOptionTextActive: { color: '#fff' },
+  noResults: { fontSize: 13, color: theme.colors.textLight, textAlign: 'center', paddingVertical: 12, fontStyle: 'italic' },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: ACCENT, marginHorizontal: theme.spacing.md, marginVertical: theme.spacing.md, padding: 16, borderRadius: theme.radius.lg, gap: 8, ...theme.shadows.md },
   saveBtnText: { color: '#fff', fontSize: theme.fontSizes.lg, fontWeight: '700' },
 });

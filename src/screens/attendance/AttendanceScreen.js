@@ -185,6 +185,19 @@ function AttendanceRow({ person, record, onCheckIn, onCheckOut, onMarkAbsent, ca
 // ── Main screen ───────────────────────────────────────────────────────────────
 const normName = (n = '') => n.replace(/^Dr\.?\s*/i, '').trim().toLowerCase();
 
+// Matches a personnel record (doctor/staff) to the logged-in user by checking
+// whether the login email contains the person's name (e.g. "kavya@veb.com"
+// contains "kavya"). Login names and clinic-record names often differ
+// (e.g. "Dr Kavya" vs "Kavya Anupriya"), so an exact-name match used to hide a
+// doctor's own row — and their check-in/out buttons — whenever they didn't match.
+const isSelf = (person, user) => {
+  if (!person || !user) return false;
+  const email = (user.email || '').trim().toLowerCase();
+  const name  = normName(person.name).replace(/\s+/g, '');
+  if (!email || !name) return false;
+  return email.includes(name);
+};
+
 export default function AttendanceScreen({ navigation }) {
   const { user } = useAuth();
   const isAdmin = ['owner', 'manager'].includes(user?.role);
@@ -327,10 +340,10 @@ export default function AttendanceScreen({ navigation }) {
 
   const displayPersonnel = isAdmin
     ? personnel
-    : personnel.filter(p => normName(p.name) === normName(user?.name));
+    : personnel.filter(p => isSelf(p, user));
   const displaySummary = isAdmin
     ? summary
-    : summary.filter(p => normName(p.name) === normName(user?.name));
+    : summary.filter(p => isSelf(p, user));
 
   const myRecord = !isAdmin && displayPersonnel.length ? getRecord(displayPersonnel[0]) : null;
   const presentCount = isAdmin ? records.filter(r => r.status === 'present').length  : (myRecord?.status === 'present'  ? 1 : 0);
