@@ -77,10 +77,10 @@ export default function DashboardScreen({ navigation }) {
   const { user } = useAuth();
   const hasFullAccess = isFullAccess(user?.role);
   const [stats, setStats] = useState({
-    patients: 0, today: 0, revenue: 0, pending: 0,
     revenueByBranch: { Avadi: 0, Thiruninravur: 0 },
     monthRevenueByBranch: { Avadi: 0, Thiruninravur: 0 },
   });
+  const [patients, setPatients] = useState([]);
   const [todayAppts, setTodayAppts] = useState([]);
   const [branchFilter, setBranchFilter] = useState('All');
   const [reminders, setReminders] = useState([]);
@@ -93,18 +93,15 @@ export default function DashboardScreen({ navigation }) {
       const [pRes, aRes, bRes, rRes, cRes] = await Promise.all([
         patientsAPI.getAll().catch(() => ({ data: [] })),
         appointmentsAPI.getToday().catch(() => ({ data: [] })),
-        billingAPI.getStats().catch(() => ({ data: { today_revenue: 0, pending_count: 0 } })),
+        billingAPI.getStats().catch(() => ({ data: { today_revenue: 0 } })),
         appointmentsAPI.getReminders().catch(() => ({ data: [] })),
         consultantAPI.getPaymentsSummary().catch(() => ({ data: [], grand_total: 0 })),
       ]);
       setStats({
-        patients: pRes.data?.length || 0,
-        today: aRes.data?.length || 0,
-        revenue: bRes.data?.today_revenue || 0,
-        pending: bRes.data?.pending_count || 0,
         revenueByBranch: bRes.data?.today_revenue_by_branch || { Avadi: 0, Thiruninravur: 0 },
         monthRevenueByBranch: bRes.data?.month_revenue_by_branch || { Avadi: 0, Thiruninravur: 0 },
       });
+      setPatients(pRes.data || []);
       setTodayAppts(aRes.data || []);
       setReminders(rRes.data || []);
       setConsultantReport({ rows: cRes.data || [], grand_total: cRes.grand_total || 0 });
@@ -183,32 +180,38 @@ export default function DashboardScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Stats Grid */}
-      <View style={styles.statsGrid}>
-        <StatCard icon="people" label="Total Patients" value={stats.patients} color={theme.colors.primary} bg="#E3F2FD" />
-        <StatCard icon="calendar" label="Today's Appts" value={stats.today} color={theme.colors.secondary} bg="#E0F2F1" />
-        <StatCard icon="cash" label="Today Revenue" value={`₹${stats.revenue?.toLocaleString('en-IN')}`} color={theme.colors.success} bg="#E8F5E9" />
-        <StatCard icon="time" label="Pending Bills" value={stats.pending} color={theme.colors.warning} bg="#FFF3E0" />
+      {/* Branch Selector */}
+      <View style={styles.branchBar}>
+        {[
+          { label: 'All', color: theme.colors.text, bg: '#ECEFF1' },
+          { label: 'Avadi', color: theme.colors.primary, bg: '#E3F2FD' },
+          { label: 'Thiruninravur', color: '#7B1FA2', bg: '#F3E5F5' },
+        ].map(b => (
+          <TouchableOpacity key={b.label}
+            style={[styles.branchCard, { backgroundColor: b.bg }, branchFilter === b.label && styles.branchCardActive]}
+            onPress={() => setBranchFilter(b.label)}>
+            <Ionicons name="business" size={14} color={b.color} />
+            <Text style={[styles.branchCardLabel, { color: b.color }]}>{b.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {/* Branch-wise appointment breakdown */}
+      {/* Stats Grid — branchwise */}
       {(() => {
-        const avadi = todayAppts.filter(a => (a.clinic_branch || 'Avadi') === 'Avadi').length;
-        const thiru = todayAppts.filter(a => a.clinic_branch === 'Thiruninravur').length;
+        const filteredPatients = branchFilter === 'All'
+          ? patients.length
+          : patients.filter(p => (p.clinic_branch || 'Avadi') === branchFilter).length;
+        const filteredAppts = branchFilter === 'All'
+          ? todayAppts.length
+          : todayAppts.filter(a => (a.clinic_branch || 'Avadi') === branchFilter).length;
+        const filteredRevenue = branchFilter === 'All'
+          ? (stats.revenueByBranch.Avadi || 0) + (stats.revenueByBranch.Thiruninravur || 0)
+          : (stats.revenueByBranch[branchFilter] || 0);
         return (
-          <View style={styles.branchBar}>
-            {[
-              { label: 'Avadi', count: avadi, color: theme.colors.primary, bg: '#E3F2FD' },
-              { label: 'Thiruninravur', count: thiru, color: '#7B1FA2', bg: '#F3E5F5' },
-            ].map(b => (
-              <TouchableOpacity key={b.label}
-                style={[styles.branchCard, { backgroundColor: b.bg }, branchFilter === b.label && styles.branchCardActive]}
-                onPress={() => setBranchFilter(prev => prev === b.label ? 'All' : b.label)}>
-                <Ionicons name="business" size={14} color={b.color} />
-                <Text style={[styles.branchCardLabel, { color: b.color }]}>{b.label}</Text>
-                <Text style={[styles.branchCardCount, { color: b.color }]}>{b.count} appt{b.count !== 1 ? 's' : ''}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.statsGrid}>
+            <StatCard icon="people" label="Total Patients" value={filteredPatients} color={theme.colors.primary} bg="#E3F2FD" />
+            <StatCard icon="calendar" label="Today's Appts" value={filteredAppts} color={theme.colors.secondary} bg="#E0F2F1" />
+            <StatCard icon="cash" label="Today Revenue" value={`₹${filteredRevenue.toLocaleString('en-IN')}`} color={theme.colors.success} bg="#E8F5E9" />
           </View>
         );
       })()}
@@ -554,7 +557,6 @@ const styles = StyleSheet.create({
   },
   branchCardActive: { borderColor: theme.colors.primary },
   branchCardLabel: { fontSize: 12, fontWeight: '700', flex: 1 },
-  branchCardCount: { fontSize: 13, fontWeight: '800' },
   branchFilterTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   branchFilterTagText: { fontSize: 11, color: theme.colors.primary, fontWeight: '600' },
   revenueSection: { marginHorizontal: theme.spacing.md, gap: theme.spacing.sm },

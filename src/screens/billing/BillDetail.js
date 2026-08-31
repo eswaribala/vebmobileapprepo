@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { theme } from '../../utils/theme';
@@ -29,6 +30,8 @@ export default function BillDetailScreen({ route, navigation }) {
   const [editPaymentMode, setEditPaymentMode] = useState('cash');
   const [editPaymentStatus, setEditPaymentStatus] = useState('paid');
   const [editNotes, setEditNotes] = useState('');
+  const [editBillDate, setEditBillDate] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     loadBill();
@@ -69,6 +72,7 @@ export default function BillDetailScreen({ route, navigation }) {
     setEditPaymentMode(bill.payment_mode || 'cash');
     setEditPaymentStatus(bill.payment_status || 'paid');
     setEditNotes(bill.notes || '');
+    setEditBillDate(bill.bill_date ? String(bill.bill_date).split('T')[0] : new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
     setIsEditing(true);
   };
 
@@ -90,7 +94,7 @@ export default function BillDetailScreen({ route, navigation }) {
         payment_status: editPaymentStatus,
         emi_months: editPaymentMode === 'emi' ? bill.emi_months : null,
         emi_amount: editPaymentMode === 'emi' ? (total_amount / (bill.emi_months || 1)) : null,
-        bill_date: bill.bill_date,
+        bill_date: editBillDate,
         notes: editNotes,
         emi_paid: bill.emi_paid,
       });
@@ -225,6 +229,26 @@ export default function BillDetailScreen({ route, navigation }) {
             <Ionicons name="add-circle" size={18} color={theme.colors.primary} />
             <Text style={styles.addItemText}>Add Item</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Bill Date */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Bill Date</Text>
+          <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
+            <Text style={styles.dateInputText}>{editBillDate}</Text>
+            <Ionicons name="calendar" size={18} color={theme.colors.primary} />
+          </TouchableOpacity>
+          {showDatePicker && (
+            <DateTimePicker
+              value={editBillDate ? new Date(editBillDate) : new Date()}
+              mode="date"
+              display="default"
+              onChange={(_, d) => {
+                setShowDatePicker(false);
+                if (d) setEditBillDate(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
+              }}
+            />
+          )}
         </View>
 
         {/* Discount */}
@@ -434,6 +458,8 @@ const styles = StyleSheet.create({
   editItemAmt: { width: 70, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, textAlign: 'right', fontSize: theme.fontSizes.md, color: theme.colors.text },
   addItemBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 10 },
   addItemText: { color: theme.colors.primary, fontWeight: '600' },
+  dateInput: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  dateInputText: { fontSize: theme.fontSizes.md, color: theme.colors.text },
   discountRow: { flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
   discountChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#FAFAFA' },
   discountChipActive: { backgroundColor: theme.colors.error, borderColor: theme.colors.error },
